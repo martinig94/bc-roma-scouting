@@ -1,0 +1,33 @@
+# Refresh rosters, season averages and photos from bc-roma-2627-analysis every morning,
+# after that repo's own collection (06:40 UTC), and commit when something changed.
+# Also runs on demand from the Actions tab. GitHub Pages redeploys on the commit.
+name: refresh data
+
+on:
+  schedule:
+    - cron: "20 7 * * *"   # 07:20 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: martinig94/bc-roma-2627-analysis
+          path: analysis
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pillow
+      - run: python build.py --analysis analysis
+      - name: commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/rosters.json photos
+          git diff --cached --quiet && echo "no change" || git commit -m "data as of $(date -u +%F)" && git push
