@@ -1,0 +1,284 @@
+{
+ "players": {
+  "ec-PAO-Breein_Tyree": {
+   "hand": "",
+   "name": "Breein Tyree",
+   "note": "",
+   "role": "SG",
+   "tags": [
+    "3PT shooter"
+   ],
+   "team": "Paok Thessaloniki",
+   "updatedAt": "2026-11-01T19:21:50.087Z"
+  },
+  "ec-PAO-Cedi_Osman": {
+   "hand": "",
+   "name": "Cedi Osman",
+   "note": "Offensive leader of the team",
+   "role": "SF",
+   "tags": [
+    "foul-drawer"
+   ],
+   "team": "Paok Thessaloniki",
+   "updatedAt": "2026-11-01T19:19:47.598Z"
+  },
+  "ec-PAO-Kyle_Alexander": {
+   "hand": "",
+   "name": "Kyle Alexander",
+   "note": "",
+   "role": "C",
+   "tags": [
+    "offensive rebounder"
+   ],
+   "team": "Paok Thessaloniki",
+   "updatedAt": "2026-11-01T19:18:22.269Z"
+  },
+  "ec-PAO-Nick_Calathes": {
+   "hand": "",
+   "name": "Nick Calathes",
+   "note": "",
+   "role": "SG",
+   "tags": [
+    "game creator",
+    "rebounder"
+   ],
+   "team": "Paok Thessaloniki",
+   "updatedAt": "2026-11-01T19:22:04.249Z"
+  },
+  "ec-ULM-Marvin_Heckel": {
+   "bullets": [],
+   "closeout": "red",
+   "hand": "",
+   "iso": "",
+   "markers": [
+    "target"
+   ],
+   "name": "Marvin Heckel",
+   "note": "",
+   "role": "SG",
+   "stat1": "reb",
+   "stat2": "ast",
+   "tags": [],
+   "team": "Ratiopharm Ulm",
+   "todos": [],
+   "updatedAt": "2026-11-05T13:10:39.969Z"
+  },
+  "ec-ULM-Nil_Failenschmid": {
+   "hand": "",
+   "name": "Nil Failenschmid",
+   "note": "",
+   "role": "SF",
+   "tags": [],
+   "team": "Ratiopharm Ulm",
+   "updatedAt": "2026-10-29T14:38:24.293Z"
+  },
+  "lba-2293": {
+   "hand": "R",
+   "name": "Garrett Nevels",
+   "note": "",
+   "role": "PG/SG",
+   "tags": [
+    "spot-up",
+    "P&R  - ball handler",
+    "iso",
+    "3PT shooter",
+    "catch-and-shoot",
+    "off the dribble"
+   ],
+   "team": "Longobardi Scafati Basket",
+   "updatedAt": "2026-10-28T09:30:41.100Z"
+  },
+  "lba-2770": {
+   "hand": "R",
+   "name": "Antonio Iannuzzi",
+   "note": "",
+   "role": "C",
+   "tags": [
+    "roller"
+   ],
+   "team": "Longobardi Scafati Basket",
+   "updatedAt": "2026-10-28T09:45:36.123Z"
+  },
+  "lba-3200": {
+   "hand": "R",
+   "name": "Alessandro Lever",
+   "note": "Usually pops and shoots from the top. Rolls rarely. Post-up on mismatches",
+   "role": "PF/C",
+   "tags": [
+    "3PT shooter",
+    "post-up",
+    "spot-up",
+    "cutter",
+    "catch-and-shoot",
+    "pick-and-pop",
+    "foul-prone"
+   ],
+   "team": "Longobardi Scafati Basket",
+   "updatedAt": "2026-10-28T09:53:35.106Z"
+  },
+  "lba-3526": {
+   "hand": "R",
+   "name": "Bruno Mascolo",
+   "note": "2P%: 31 on 6.4 attempts. From Pick and roll dribble jumper short (1/7) or to the basket (2/7). 1/4 dribble jumper",
+   "role": "PG",
+   "tags": [
+    "foul-drawer",
+    "3PT shooter",
+    "rebounder",
+    "driver",
+    "iso",
+    "P&R  - ball handler",
+    "game creator"
+   ],
+   "team": "Longobardi Scafati Basket",
+   "updatedAt": "2026-10-28T09:36:44.785Z"
+  },
+  "lba-6604": {
+   "bullets": [
+    "game creator",
+    "3PT shooter",
+    "driver"
+   ],
+   "closeout": "red",
+   "hand": "R",
+   "hot": false,
+   "iso": "????",
+   "key": false,
+   "marker": "target",
+   "markers": [
+    "target"
+   ],
+   "name": "Colbey Ross",
+   "note": "",
+   "role": "PG",
+   "stat1": "fg2p",
+   "stat2": "fg3p",
+   "tags": [
+    "foul-drawer",
+    "game creator",
+    "3PT shooter",
+    "turnover-prone",
+    "driver"
+   ],
+   "team": "Pallacanestro Trieste",
+   "todos": [
+    "force left",
+    "pressure the ball"
+   ],
+   "updatedAt": "2026-11-06T11:34:28.813Z"
+  },
+  "lba-7030": {
+   "hand": "R",
+   "name": "Charlie Edward Moore",
+   "note": "",
+   "role": "PG/SG",
+   "tags": [
+    "foul-drawer",
+    "3PT shooter",
+    "off the dribble",
+    "game creator",
+    "transition runner",
+    "P&R  - ball handler",
+    "turnover-prone"
+   ],
+   "team": "Longobardi Scafati Basket",
+   "updatedAt": "2026-10-28T09:34:43.138Z"
+  },
+  "lba-7319": {
+   "hand": "R",
+   "name": "Rodney McGruder",
+   "note": "",
+   "role": "SG",
+   "tags": [
+    "offensive rebounder",
+    "spot-up",
+    "catch-and-shoot"
+   ],
+   "team": "Longobardi Scafati Basket",
+   "updatedAt": "2026-10-28T09:42:01.110Z"
+  },
+  "lba-9346": {
+   "hand": "R",
+   "name": "Brandon Johnson",
+   "note": "",
+   "role": "PF/C",
+   "tags": [
+    "3PT shooter",
+    "rebounder",
+    "catch-and-shoot",
+    "spot-up"
+   ],
+   "team": "Longobardi Scafati Basket",
+   "updatedAt": "2026-10-28T10:02:43.479Z"
+  },
+  "lba-9347": {
+   "hand": "R",
+   "name": "Mezie Offurum",
+   "note": "",
+   "role": "SF",
+   "tags": [
+    "rebounder",
+    "2PT shooter",
+    "spot-up",
+    "transition runner",
+    "post-up",
+    "catch-and-shoot",
+    "slasher"
+   ],
+   "team": "Longobardi Scafati Basket",
+   "updatedAt": "2026-10-28T09:58:20.640Z"
+  },
+  "lba-9348": {
+   "hand": "L",
+   "name": "Ze'Rik Onyema",
+   "note": "often: 1 dribble with the right hand, spins and left hook",
+   "role": "C",
+   "tags": [
+    "transition runner",
+    "rebounder",
+    "offensive rebounder",
+    "2PT shooter",
+    "roller",
+    "cutter",
+    "rim protector",
+    "drives left",
+    "slasher"
+   ],
+   "team": "Longobardi Scafati Basket",
+   "updatedAt": "2026-10-28T09:39:22.619Z"
+  }
+ },
+ "tags": {
+  "list": [
+   "3PT shooter",
+   "catch-and-shoot",
+   "off the dribble",
+   "slasher",
+   "P&R  - ball handler",
+   "post-up",
+   "pick-and-pop",
+   "roller",
+   "lob threat",
+   "rim protector",
+   "switchable",
+   "offensive rebounder",
+   "cutter",
+   "transition runner",
+   "foul-prone",
+   "turnover-prone",
+   "drives left",
+   "drives right",
+   "streaky",
+   "foul-drawer",
+   "game creator",
+   "rebounder",
+   "2PT shooter",
+   "driver",
+   "spot-up",
+   "iso"
+  ]
+ },
+ "teams": {},
+ "template": null,
+ "todos": null
+}

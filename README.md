@@ -1,0 +1,53 @@
+# BC Roma opponent scouting
+
+A one-page tool to tag the players of BC Roma's next opponents while watching clips (role, shooting hand,
+tags, slide bullets, to-dos, stat picks, close-out colour, markers, notes) and to turn the notes into the
+scouting deck: the `{{name}}` slide of `template.pptx` repeated once per player, plus the cover, roster and
+stats slides filled for the team.
+
+Rosters, season averages and headshots come from the [bc-roma-2627-analysis](../bc-roma-2627-analysis) repo.
+
+## Run it
+
+```bash
+python serve.py            # then open http://localhost:8787/
+```
+
+`serve.py` is a 100-line static server: every click is written to `data/scouting.json`, so the notes are
+versioned with the repo (commit after a scouting session). Uploading a new template or a team logo through
+the page writes `template.pptx` / `logos/<team>.png` as well.
+
+The page also works without the server, e.g. on GitHub Pages or `python -m http.server`: then the notes stay
+in that browser (localStorage) and travel through the *Download / Import scouting.json* buttons. Keep in mind
+that a GitHub Pages site of a free account is public.
+
+## Refresh rosters and stats
+
+```bash
+python build.py                                  # analysis repo at ../bc-roma-2627-analysis
+python build.py --analysis /path/to/bc-roma-2627-analysis
+git add data/rosters.json photos && git commit -m "rosters as of $(date +%F)"
+```
+
+`build.py` rewrites `data/rosters.json` (teams ordered by BC Roma's next game, players, season averages,
+game numbers) and the `photos/` thumbnails. Needs Pillow.
+
+## Files
+
+| path | what |
+|---|---|
+| `index.html` | the page (vanilla JS; jsPDF and JSZip from cdnjs) |
+| `serve.py` | local server + save API |
+| `build.py` | data refresh from the analysis repo |
+| `data/rosters.json` | generated: rosters, stats, games, photo and logo lists |
+| `data/scouting.json` | your notes (players, tag lists, team settings, template choice) |
+| `template.pptx` | the deck template: one slide carrying `{{name}} {{surname}} {{number}} {{height}} {{role}} {{hand}} {{minutes}} {{points}} {{stat_1}} {{stat_2}} {{bullet_1..3}} {{to_do1..3}} {{iso}} {{photo}}`, a CLOSE OUT table, parked 🔑/🚀 shapes; a cover with `<COMP> - GAME #n`; a roster table headed PG/SG/SF/PF/C; a stats table headed `FGM-A` |
+| `logos/<team id>.png` | opponent crests (legabasket.it media CDN, EuroCup API); `lba-<team_id>` / `ec-<club code>` |
+| `photos/<player id>.jpg` | generated headshots |
+
+Team ids are `lba-<team_id>` (from `data/teams.csv` of the analysis repo) and `ec-<EuroLeague club code>`.
+
+## The same page on claude.ai
+
+The page detects where it runs: on claude.ai (as an artifact) it uses the artifact's own database and
+file-save prompt; behind `serve.py` it uses the save API; anywhere else it is browser-only.

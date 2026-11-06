@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>BC Roma Opponent Scouting</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+</head>
+<body>
+<style>
+/* Layout: a team rail on the left, the selected roster as a worksheet on the right; tag manager folds in above the roster. */
+:root {
+  --bg: #f3f1ec;
+  --panel: #ffffff;
+  --ink: #1d2230;
+  --muted: #6b7080;
+  --line: #d9d6cd;
+  --accent: #b7382c;
+  --accent-ink: #ffffff;
+  --chip: #ebe8e0;
+  --chip-on: #1d2230;
+  --chip-on-ink: #f3f1ec;
+  --todo: #2f5a9d;
+  --ok: #2f7d4f;
+  --warn: #e0a800;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15171d; --panel: #1f222b; --ink: #ecebe4; --muted: #9a9ead; --line: #343846;
+  --accent: #e0584a; --accent-ink: #15171d; --chip: #2b2f3a; --chip-on: #ecebe4; --chip-on-ink: #15171d; --todo: #7fa6e8; --ok: #5cb97f; --warn: #f0c04a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #15171d; --panel: #1f222b; --ink: #ecebe4; --muted: #9a9ead; --line: #343846;
+  --accent: #e0584a; --accent-ink: #15171d; --chip: #2b2f3a; --chip-on: #ecebe4; --chip-on-ink: #15171d; --todo: #7fa6e8; --ok: #5cb97f; --warn: #f0c04a; color-scheme: dark }
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.4; }
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; cursor: pointer; }
+input, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100%; }
+.rail { background: var(--panel); border-right: 1px solid var(--line); padding-block: 18px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 12px; }
+.main { padding-block: 18px 40px; padding-left: 20px; padding-right: max(16px, env(safe-area-inset-right, 0px)); min-width: 0; }
+.narrow-only { display: none; }
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  .narrow-only { display: inline-block; }
+  .rail { border-right: 0; border-bottom: 1px solid var(--line); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .main { padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+}
+
+h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: .01em; margin: 0 0 2px; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+.eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin: 14px 0 6px; }
+
+.teams { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.teams button { width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 7px 8px; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: baseline; }
+.teams button:hover { background: var(--chip); }
+.teams button[aria-current="true"] { background: var(--chip-on); color: var(--chip-on-ink); }
+.teams .tname { font-weight: 500; font-size: 13px; }
+.teams .tdate { font-family: var(--mono); font-size: 11px; opacity: .8; }
+.teams .tmeta { grid-column: 1 / -1; font-size: 11px; opacity: .7; display: flex; gap: 8px; }
+.teams .done { width: 100%; height: 3px; border-radius: 2px; background: var(--line); grid-column: 1 / -1; overflow: hidden; }
+.teams .done i { display: block; height: 100%; background: var(--ok); }
+.teams button[aria-current="true"] .done { background: rgba(255,255,255,.25); }
+
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }
+.head h2 { font-family: var(--display); font-weight: 700; font-size: 34px; line-height: 1; margin: 0; }
+.head .game { font-size: 13px; color: var(--muted); }
+.head .game b { color: var(--ink); font-weight: 600; }
+.status { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+.status.saving { color: var(--accent); }
+
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.btn { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+.btn:hover { border-color: var(--ink); }
+.btn:disabled { opacity: .6; cursor: default; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.search { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 10px; font-size: 13px; min-width: 160px; }
+.opt { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+.panel h3 { margin: 0 0 6px; font-size: 14px; }
+.panel p { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+.taglist { display: flex; flex-wrap: wrap; gap: 6px; }
+.tagrow { display: inline-flex; align-items: center; gap: 2px; background: var(--chip); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 12px; }
+.tagrow input { border: 0; background: transparent; width: 11ch; font-size: 12px; padding: 2px 0; }
+.tagrow .n { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.tagrow button { border: 0; background: transparent; border-radius: 999px; width: 22px; height: 22px; line-height: 1; color: var(--muted); }
+.tagrow button:hover { background: var(--line); color: var(--ink); }
+.addtag { display: flex; gap: 6px; margin-top: 10px; }
+.addtag input { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 6px 10px; }
+.tpl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
+
+.roster { display: flex; flex-direction: column; gap: 8px; }
+.player { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 6px 12px; }
+.player.touched { border-left: 3px solid var(--ok); padding-left: 12px; }
+.id { grid-row: span 8; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.id img, .id .noimg { width: 56px; height: 72px; object-fit: cover; object-position: top; border-radius: 6px; background: var(--chip); display: block; }
+.id .noimg { display: grid; place-items: center; font-family: var(--display); font-weight: 600; font-size: 20px; color: var(--muted); }
+.num { font-family: var(--display); font-weight: 700; font-size: 22px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
+.who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.who .name { font-weight: 600; font-size: 15px; }
+.who .bio { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+.who .src { color: var(--muted); font-size: 11px; }
+.statline { font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.statline b { color: var(--ink); font-weight: 500; }
+.controls { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
+.group { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 4px; }
+.chip { border: 1px solid transparent; background: var(--chip); border-radius: 999px; padding: 3px 10px; font-size: 12px; line-height: 1.3; }
+.chip:hover { border-color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-ink); }
+.chip.hand[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.chip.todo[aria-pressed="true"] { background: var(--todo); color: #fff; }
+.chip.co-red[aria-pressed="true"] { background: #c31a00; color: #fff; }
+.chip.co-yellow[aria-pressed="true"] { background: #ffc000; color: #1d2230; }
+.chip.star { padding: 3px 7px; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.ordered { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 12px; }
+.ordered .item { display: inline-flex; align-items: center; gap: 1px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 2px 1px 8px; }
+.ordered .item button { border: 0; background: transparent; padding: 0 4px; color: var(--muted); font-size: 12px; }
+.ordered .item button:hover { color: var(--ink); }
+.ordered .hint { color: var(--muted); }
+.fields { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.fields select, .fields input[type="text"] { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+.fields input[type="text"] { min-width: 160px; }
+.note { width: 100%; border: 0; border-top: 1px dashed var(--line); background: transparent; padding: 6px 0 0; font-size: 13px; resize: vertical; min-height: 28px; }
+.note::placeholder { color: var(--muted); }
+.empty { color: var(--muted); padding: 30px 0; text-align: center; }
+.foot { margin-top: 24px; font-size: 11px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .chip, .teams button { transition: background .12s, color .12s; } }
+</style>
+
+<div class="app">
+  <aside class="rail">
+    <h1>Opponent scouting</h1>
+    <p class="sub">BC Roma 2026/27 · LBA and EuroCup</p>
+    <input class="search" id="search" type="search" placeholder="Find a player or team" aria-label="Find a player or team">
+    <div class="eyebrow">Upcoming</div>
+    <ul class="teams" id="teams-upcoming"></ul>
+    <div class="eyebrow">Already faced</div>
+    <ul class="teams" id="teams-played"></ul>
+  </aside>
+  <section class="main">
+    <div class="head">
+      <div>
+        <h2 id="team-name">Pick a team</h2>
+        <div class="game" id="team-game"></div>
+      </div>
+      <div class="status" id="status">Loading saved notes…</div>
+      <button class="btn narrow-only" id="back-to-teams">↑ Teams</button>
+    </div>
+    <div class="fields" id="team-deck" hidden>
+      <span class="group"><span class="lbl">Deck name</span><input type="text" id="team-short" placeholder="e.g. BOSNA" aria-label="Team name on the slides"></span>
+      <span class="group"><span class="lbl">Logo</span><span id="team-logo-name">none</span><label class="btn" id="logo-upload-lbl" hidden>Upload logo <input type="file" id="logo-upload" accept="image/png,image/jpeg" hidden></label><button class="btn" id="logo-remove" hidden>Remove</button></span>
+    </div>
+    <div class="tools">
+      <button class="btn" id="toggle-tags" aria-expanded="false">Manage tags</button>
+      <button class="btn" id="copy-json">Copy JSON</button>
+      <button class="btn" id="export-csv" hidden>Export CSV</button>
+      <button class="btn" id="export-pdf" hidden>Export PDF</button>
+      <button class="btn primary" id="export-pptx" hidden>Build PowerPoint</button>
+      <label class="opt" id="only-players-opt" hidden><input type="checkbox" id="only-players"> player slides only</label>
+      <button class="btn" id="export-state" hidden>Download scouting.json</button>
+      <label class="btn" id="import-state-lbl" hidden>Import scouting.json <input type="file" id="import-state" accept=".json" hidden></label>
+    </div>
+    <div class="panel" id="tagmgr" hidden>
+      <h3>Tags</h3>
+      <p>Rename a tag in place (every player keeps it), or remove one with ×. Changes save as you type.</p>
+      <div class="taglist" id="taglist"></div>
+      <form class="addtag" id="addtag"><input id="newtag" placeholder="New tag, e.g. lob threat" aria-label="New tag"><button class="btn primary" type="submit">Add</button></form>
+      <h3 style="margin-top:14px">To do</h3>
+      <p>What to do against the player; up to three per player go into the slide's TO DO column.</p>
+      <div class="taglist" id="todolist"></div>
+      <form class="addtag" id="addtodo"><input id="newtodo" placeholder="New to-do, e.g. go under on P&amp;R" aria-label="New to-do"><button class="btn primary" type="submit">Add</button></form>
+      <h3 style="margin-top:14px">Slide template</h3>
+      <div class="tpl"><span id="tpl-name">Built-in template (test_bc_roma.pptx)</span><label class="btn" id="tpl-upload-lbl" hidden>Upload a new .pptx template <input type="file" id="tpl-upload" accept=".pptx" hidden></label><button class="btn" id="tpl-reset" hidden>Back to built-in</button></div>
+      <p style="margin-top:6px">The template is any deck with one slide carrying the {{name}}, {{surname}}, {{number}}… placeholders; that slide is repeated once per player.</p>
+    </div>
+    <div class="roster" id="roster"><div class="empty">Choose a team on the left.</div></div>
+    <p class="foot" id="foot"></p>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+// Rosters, stats, photo and logo lists come from data/rosters.json (written by build.py); loaded in boot().
+let DATA = null, ROSTERS = [], ASOF = "", PHOTO_IDS = new Set(), LOGO_IDS = new Set();
+const DEFAULT_TAGS = ["shooter","catch-and-shoot","off the dribble","slasher","playmaker","ball handler","post-up","pick-and-pop","roller","lob threat","rim protector","switchable","offensive rebounder","cutter","transition runner","foul-prone","turnover-prone","drives left","drives right","streaky"];
+const DEFAULT_TODOS = ["go under on P&R","go over on P&R","switch","ICE the side P&R","close out hard","close out short, stay down","no middle","force left","force right","box out early","front the post","help early on drives","no help off him","pressure the ball"];
+const ROLES = ["PG","SG","SF","PF","C"];
+const HANDS = [["L","Left"],["R","Right"],["?","Unknown"]];
+const STATS = [["reb","REB"],["oreb","OREB"],["ast","AST"],["stl","STL"],["blk","BLK"],["to","TO"],["pf","PF"],["fg2p","2PT%"],["fg3p","3PT%"],["fg3a","3PA"],["ftp","FT%"],["pir","PIR"]];
+const TODAY = new Date().toISOString().slice(0, 10);
+
+let tags = null, todos = null, saved = {}, current = null, query = "", tplConfig = null, teamCfg = {};
+
+// ---- where the notes live: the claude.ai artifact store, the local serve.py, or this browser only ----
+const store = {
+  mode: "local", writable: true, canUpload: false, db: null, downloads: null, assets: null,
+  async detect() {
+    if (window.claude && window.claude.use) {
+      this.mode = "artifact";
+      this.downloads = await window.claude.use("downloads");
+      this.assets = await window.claude.use("assets");
+      this.db = await window.claude.use("db");
+      this.writable = !!this.db; this.canUpload = !!this.assets;
+      return;
+    }
+    try { const r = await fetch("api/state", { cache: "no-store" }); if (r.ok) { this.mode = "server"; this.state = await r.json(); this.canUpload = true; return; } } catch {}
+    this.mode = "local";
+    try { this.state = JSON.parse(localStorage.getItem("bc-roma-scouting") || "{}"); } catch { this.state = {}; }
+  },
+  // the whole state, for the server and browser modes
+  state: {},
+  local() { try { localStorage.setItem("bc-roma-scouting", JSON.stringify(this.state)); } catch {} },
+  async post(path, body) { const r = await fetch("api/" + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!r.ok) throw Object.assign(new Error("save failed"), { code: "http_" + r.status }); },
+  async savePlayer(id, body) {
+    if (this.mode === "artifact") return this.db.doc("scouting/" + id).set(body);
+    (this.state.players = this.state.players || {})[id] = body;
+    if (this.mode === "server") return this.post("player/" + encodeURIComponent(id), body); this.local();
+  },
+  async saveConfig(kind, obj) {   // kind: tags | todos | template; obj null deletes
+    if (this.mode === "artifact") return obj ? this.db.doc("config/" + kind).set(obj) : this.db.doc("config/" + kind).delete();
+    if (obj) this.state[kind] = obj; else delete this.state[kind];
+    if (this.mode === "server") return this.post("config/" + kind, obj || {}); this.local();
+  },
+  async saveTeam(id, cfg) {
+    if (this.mode === "artifact") return this.db.doc("teams/" + id).set(cfg);
+    (this.state.teams = this.state.teams || {})[id] = cfg;
+    if (this.mode === "server") return this.post("team/" + encodeURIComponent(id), cfg); this.local();
+  },
+  // template .pptx (kind "template") or a team logo (kind "logo", with the team id): resolves {url, name}
+  async upload(kind, file, id) {
+    if (this.mode === "artifact") {
+      if (kind === "template") { const b64 = bytesToB64(new Uint8Array(await file.arrayBuffer())); const up = await this.assets.upload(new File([b64], file.name.replace(/\.pptx$/i, "") + ".b64.txt", { type: "text/plain" })); return { url: "/_blob/" + up.id, assetId: up.id, name: file.name, b64: true }; }
+      const up = await this.assets.upload(file); return { url: "/_blob/" + up.id, assetId: up.id, name: file.name, type: file.type };
+    }
+    const r = await fetch("api/upload/" + kind + (id ? "/" + encodeURIComponent(id) : ""), { method: "POST", headers: { "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(file.name) }, body: await file.arrayBuffer() });
+    if (!r.ok) throw Object.assign(new Error("upload failed"), { code: "http_" + r.status }); return r.json();
+  },
+  async discard(assetId) { if (this.mode === "artifact" && assetId && this.assets) { try { await this.assets.delete(assetId); } catch {} } },
+  async saveFile(filename, data) {
+    if (this.mode === "artifact") { if (!this.downloads) throw { code: "unavailable" }; return this.downloads.save({ filename, data }); }
+    const blob = data instanceof Blob ? data : new Blob([data]); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); return { status: "saved" };
+  },
+  templateUrl() { return tplConfig && tplConfig.url ? tplConfig.url : tplConfig && tplConfig.assetId ? "/_blob/" + tplConfig.assetId : this.mode === "artifact" ? "template.b64.txt" : "template.pptx"; },
+  templateIsB64() { return this.mode === "artifact" ? !(tplConfig && tplConfig.url && !tplConfig.b64) : !!(tplConfig && tplConfig.b64); },
+  // feed the page: once (server/local) or live (artifact)
+  subscribe(on) {
+    if (this.mode !== "artifact") { const s = this.state; on.tags(s.tags && s.tags.list); on.todos(s.todos && s.todos.list); on.template(s.template || null); on.teams(s.teams || {}); on.players(s.players || {}); return; }
+    const db = this.db;
+    db.doc("config/tags").onSnapshot(s => on.tags(s.exists ? s.data().list : null), e => setStatus("Tags unavailable (" + e.code + ")"));
+    db.doc("config/todos").onSnapshot(s => on.todos(s.exists ? s.data().list : null), e => setStatus("To-dos unavailable (" + e.code + ")"));
+    db.doc("config/template").onSnapshot(s => on.template(s.exists ? s.data() : null), () => {});
+    db.collection("teams").onSnapshot(s => { if (s.metadata.hasPendingWrites) return; const next = {}; for (const d of s.docs) next[d.id] = d.data(); on.teams(next); }, () => {});
+    db.collection("scouting").onSnapshot(s => { if (s.metadata.hasPendingWrites) return; const next = {}; for (const d of s.docs) next[d.id] = d.data(); on.players(next); }, e => setStatus("Saved notes unavailable (" + e.code + ")"));
+  }
+};
+const SHORT = { "Acqua S.Bernardo Cantù": "CANTÙ", "APU Old Wild West Udine": "UDINE", "Armani Olimpia Milano": "MILANO", "Bertram Derthona Tortona": "TORTONA", "Dolomiti Energia Trentino": "TRENTO", "Longobardi Scafati Basket": "SCAFATI", "Maxima Roma": "MAXIMA ROMA", "Napoli Basketball": "NAPOLI", "Nutribullet Treviso Basket": "TREVISO", "Openjobmetis Varese": "VARESE", "Pallacanestro Trieste": "TRIESTE", "Tezenis Verona": "VERONA", "Umana Reyer Venezia": "VENEZIA", "UNA Hotels Reggio Emilia": "REGGIO EMILIA", "Virtus Costa Bologna": "VIRTUS BOLOGNA", "Paok Thessaloniki": "PAOK", "Ratiopharm Ulm": "ULM", "Bahcesehir College Istanbul": "BAHCESEHIR", "Lietkabelis Panevezys": "LIETKABELIS", "Balkan Botevgrad": "BALKAN", "Kids&Us Manresa": "MANRESA", "Bosna Bh Telecom Sarajevo": "BOSNA" };
+const shortName = (t) => (teamCfg[t.id] && teamCfg[t.id].short) || SHORT[t.name] || t.name.toUpperCase();
+// a team's logo: one uploaded for it, else the built-in logos/<team id>.png (from legabasket.it and the EuroCup API)
+const logoUrl = (t) => { const c = teamCfg[t.id] || {}; return c.logoUrl ? c.logoUrl : c.logoAssetId ? "/_blob/" + c.logoAssetId : LOGO_IDS.has(t.id) ? "logos/" + t.id + ".png" : ""; };
+const $ = (s) => document.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => { const n = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v); } for (const k of kids) n.append(k); return n; };
+const fmtDate = (d) => { const [y, m, dd] = d.split("-"); return `${dd}/${m}`; };
+const nextGame = (t) => t.games.find(g => g.date >= TODAY);
+const EMPTY = () => ({ role: "", hand: "", tags: [], bullets: [], todos: [], note: "", iso: "", closeout: "", markers: [], stat1: "reb", stat2: "ast" });
+const MARKERS = [["key", "🔑", "key"], ["hot", "🚀", "hot"], ["target", "🎯", "target"]];
+const rec = (p) => { const s = saved[p.id] || {}; const r = { ...EMPTY(), role: p.role || "", ...s }; if (!s.markers) r.markers = s.marker ? [s.marker] : [s.key && "key", s.hot && "hot"].filter(Boolean); return r; };
+const teamById = (id) => ROSTERS.find(t => t.id === id);
+const tagList = () => tags || DEFAULT_TAGS, todoList = () => todos || DEFAULT_TODOS;
+const touched = (r) => !!(r && (r.hand || (r.tags || []).length || (r.todos || []).length || r.note || r.iso));
+const statVal = (p, k) => { const s = p.stats; if (!s || s[k] == null) return ""; const lbl = STATS.find(x => x[0] === k)?.[1] || k.toUpperCase(); return lbl.endsWith("%") ? `${s[k]}% ${lbl.slice(0, -1)}` : `${s[k]} ${lbl}`; };
+const heightText = (cm) => { if (!cm) return ""; const inch = Math.round(Number(cm) / 2.54); return `${cm} - ${Math.floor(inch / 12)}’${inch % 12}’’`; };
+const handText = (h) => ({ L: "Left", R: "Right", "?": "?" })[h] || "";
+
+function setStatus(text, saving) { const s = $("#status"); s.textContent = text; s.classList.toggle("saving", !!saving); }
+
+function renderTeams() {
+  const up = $("#teams-upcoming"), pl = $("#teams-played"); up.replaceChildren(); pl.replaceChildren();
+  const q = query.trim().toLowerCase();
+  for (const t of ROSTERS) {
+    if (q && !t.name.toLowerCase().includes(q) && !t.players.some(p => p.name.toLowerCase().includes(q))) continue;
+    const g = nextGame(t);
+    const n = t.players.length, done = t.players.filter(p => touched(saved[p.id])).length;
+    const b = el("button", { "aria-current": String(t.id === current), onclick: () => select(t.id, true) },
+      el("span", { class: "tname" }, t.name),
+      el("span", { class: "tdate" }, g ? fmtDate(g.date) : "—"),
+      el("span", { class: "tmeta" }, t.comp, g ? (g.home ? "home" : "away") : "no game left", `${done}/${n} tagged`),
+      el("span", { class: "done" }, Object.assign(el("i"), { style: `width:${n ? 100 * done / n : 0}%` })));
+    (g ? up : pl).append(el("li", {}, b));
+  }
+}
+
+function select(id, byUser) {
+  current = id; renderTeams(); renderRoster();
+  if (byUser && window.matchMedia("(max-width: 760px)").matches) document.querySelector(".main").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderRoster() {
+  const t = teamById(current), box = $("#roster"); box.replaceChildren();
+  if (!t) { $("#team-name").textContent = "Pick a team"; $("#team-game").textContent = ""; box.append(el("div", { class: "empty" }, "Choose a team on the left.")); return; }
+  $("#team-name").textContent = t.name;
+  const g = nextGame(t);
+  const gl = $("#team-game"); gl.replaceChildren();
+  if (g) gl.append("Next: ", el("b", {}, `${fmtDate(g.date)} ${g.home ? "at home" : "away"}`), ` · ${t.comp}${g.round ? " " + g.round : ""}${g.n ? ` · game #${g.n}` : ""}`);
+  else gl.append(`${t.comp} · no game left this season`);
+  $("#team-deck").hidden = false;
+  const sh = $("#team-short"); if (document.activeElement !== sh) sh.value = shortName(t);
+  const cfg = teamCfg[t.id] || {};
+  const ln = $("#team-logo-name"); ln.replaceChildren();
+  const lu = logoUrl(t);
+  if (lu) ln.append(el("img", { src: lu, alt: "", width: "28", height: "28", style: "vertical-align:middle;object-fit:contain;margin-right:6px" }), cfg.logoUrl || cfg.logoAssetId ? cfg.logoName || "uploaded" : "built-in");
+  else ln.append("none (slide 1 gets no logo)");
+  $("#logo-remove").hidden = !(cfg.logoUrl || cfg.logoAssetId);
+  const q = query.trim().toLowerCase();
+  for (const p of t.players) {
+    if (q && !p.name.toLowerCase().includes(q) && !t.name.toLowerCase().includes(q)) continue;
+    box.append(playerCard(p));
+  }
+}
+
+function orderedList(items, onChange, hint) {
+  const wrap = el("div", { class: "ordered" });
+  items.forEach((it, i) => {
+    const move = (d) => { const a = [...items]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; onChange(a); };
+    wrap.append(el("span", { class: "item" }, `${i + 1}. ${it}`,
+      el("button", { title: "Move up", onclick: () => move(-1) }, "↑"),
+      el("button", { title: "Move down", onclick: () => move(1) }, "↓"),
+      el("button", { title: "Remove", onclick: () => onChange(items.filter(x => x !== it)) }, "×")));
+  });
+  if (!items.length) wrap.append(el("span", { class: "hint" }, hint));
+  return wrap;
+}
+
+function playerCard(p) {
+  const r = rec(p), roles = r.role ? r.role.split("/") : [];
+  const card = el("div", { class: "player" + (saved[p.id] ? " touched" : ""), id: "p-" + p.id });
+  const initials = p.name.split(/\s+/).map(w => w[0] || "").join("").slice(0, 3).toUpperCase();
+  const pic = PHOTO_IDS.has(p.id) ? el("img", { src: "photos/" + p.id + ".jpg", alt: "", loading: "lazy", width: "56", height: "72" }) : el("span", { class: "noimg", title: "No photo in the repo yet" }, initials);
+  card.append(el("div", { class: "id" }, pic, el("span", { class: "num" }, p.num || "·")));
+  const bio = [p.height ? p.height + " cm" : "", p.born ? "b. " + p.born : "", p.country].filter(Boolean).join(" · ");
+  card.append(el("div", { class: "who" }, el("span", { class: "name" }, p.name), el("span", { class: "bio" }, bio), p.role ? el("span", { class: "src" }, "listed " + p.role) : ""));
+  const s = p.stats, sl = el("div", { class: "statline" });
+  if (s) sl.append(el("span", {}, `${s.g} G`), el("span", {}, el("b", {}, s.min), " MIN"), el("span", {}, el("b", {}, s.pts), " PTS"), el("span", {}, el("b", {}, s.reb), " REB"), el("span", {}, el("b", {}, s.ast), " AST"), el("span", {}, el("b", {}, s.fg3p == null ? "–" : s.fg3p + "%"), " 3PT"), el("span", {}, el("b", {}, s.pir), " PIR"));
+  else sl.append("No games played yet in the data");
+  card.append(sl);
+
+  const roleGroup = el("div", { class: "group" }, el("span", { class: "lbl" }, "Role"));
+  for (const ro of ROLES) roleGroup.append(el("button", { class: "chip", "aria-pressed": String(roles.includes(ro)), onclick: () => {
+    let next = roles.includes(ro) ? roles.filter(x => x !== ro) : [...roles, ro];
+    if (next.length > 2) next = next.slice(-2);
+    next.sort((a, b) => ROLES.indexOf(a) - ROLES.indexOf(b));
+    save(p, { role: next.join("/") });
+  } }, ro));
+  const handGroup = el("div", { class: "group" }, el("span", { class: "lbl" }, "Hand"));
+  for (const [h, label] of HANDS) handGroup.append(el("button", { class: "chip hand", title: label, "aria-pressed": String(r.hand === h), onclick: () => save(p, { hand: r.hand === h ? "" : h }) }, h));
+  card.append(el("div", { class: "controls" }, roleGroup, handGroup));
+
+  // Tags: click to toggle; ★ on a selected tag puts it among the three slide bullets
+  const tagBox = el("div", { class: "tags" }, el("span", { class: "lbl" }, "Tags"));
+  const toggleTag = (tg) => { const on = r.tags.includes(tg); save(p, { tags: on ? r.tags.filter(x => x !== tg) : [...r.tags, tg], bullets: on ? r.bullets.filter(x => x !== tg) : r.bullets }); };
+  const allTags = [...tagList(), ...r.tags.filter(tg => !tagList().includes(tg))];
+  for (const tg of allTags) {
+    const on = r.tags.includes(tg), isB = r.bullets.includes(tg);
+    tagBox.append(el("button", { class: "chip", "aria-pressed": String(on), onclick: () => toggleTag(tg) }, tg));
+    if (on) tagBox.append(el("button", { class: "chip star", "aria-pressed": String(isB), title: isB ? "Remove from slide bullets" : "Use as a slide bullet (max 3)", onclick: () => { if (isB) save(p, { bullets: r.bullets.filter(x => x !== tg) }); else if (r.bullets.length < 3) save(p, { bullets: [...r.bullets, tg] }); else setStatus("Three bullets already chosen: remove one first"); } }, isB ? "★" : "☆"));
+  }
+  card.append(tagBox);
+  card.append(el("div", { class: "tags" }, el("span", { class: "lbl" }, "Bullets"), orderedList(r.bullets, (a) => save(p, { bullets: a }), "none: press ☆ on a tag")));
+
+  const todoBox = el("div", { class: "tags" }, el("span", { class: "lbl" }, "To do"));
+  const allTodos = [...todoList(), ...r.todos.filter(x => !todoList().includes(x))];
+  for (const td of allTodos) todoBox.append(el("button", { class: "chip todo", "aria-pressed": String(r.todos.includes(td)), onclick: () => { if (r.todos.includes(td)) save(p, { todos: r.todos.filter(x => x !== td) }); else if (r.todos.length < 3) save(p, { todos: [...r.todos, td] }); else setStatus("Three to-dos already chosen: remove one first"); } }, td));
+  card.append(todoBox);
+  if (r.todos.length) card.append(el("div", { class: "tags" }, el("span", { class: "lbl" }, "Order"), orderedList(r.todos, (a) => save(p, { todos: a }), "")));
+
+  const fields = el("div", { class: "fields" });
+  const ATT = { fg2p: "fg2a", fg3p: "fg3a", ftp: "fta" };   // a percentage shows the attempts per game beside it
+  const statSel = (key) => { const sel = el("select", { id: key + "-" + p.id, onchange: (e) => save(p, { [key]: e.target.value }, true) }); for (const [k, lbl] of STATS) { const s = p.stats; const att = s && ATT[k] && s[ATT[k]] != null ? ` (${s[ATT[k]]} att/g)` : ""; const o = el("option", { value: k }, s && s[k] != null ? `${lbl} ${s[k]}${lbl.endsWith("%") ? "%" : ""}${att}` : lbl); if (r[key] === k) o.selected = true; sel.append(o); } return sel; };
+  fields.append(el("span", { class: "group" }, el("span", { class: "lbl" }, "Stat 1"), statSel("stat1")), el("span", { class: "group" }, el("span", { class: "lbl" }, "Stat 2"), statSel("stat2")));
+  const co = el("span", { class: "group" }, el("span", { class: "lbl" }, "Close out"));
+  for (const [v, cls, lbl] of [["", "", "none"], ["yellow", "co-yellow", "yellow"], ["red", "co-red", "red"]]) co.append(el("button", { class: "chip " + cls, "aria-pressed": String(r.closeout === v), onclick: () => save(p, { closeout: v }) }, lbl));
+  fields.append(co);
+  const mk = el("span", { class: "group" }, el("span", { class: "lbl" }, "Markers"));
+  for (const [v, glyph, lbl] of MARKERS) mk.append(el("button", { class: "chip", "aria-pressed": String(r.markers.includes(v)), onclick: () => save(p, { markers: r.markers.includes(v) ? r.markers.filter(x => x !== v) : MARKERS.map(m => m[0]).filter(m => m === v || r.markers.includes(m)) }) }, `${glyph} ${lbl}`));
+  fields.append(mk);
+  let isoTimer; const iso = el("input", { type: "text", id: "iso-" + p.id, placeholder: "ISO note", oninput: (e) => { clearTimeout(isoTimer); isoTimer = setTimeout(() => save(p, { iso: e.target.value }, true), 600); } }); iso.value = r.iso;
+  fields.append(el("span", { class: "group" }, el("span", { class: "lbl" }, "ISO"), iso));
+  card.append(fields);
+
+  let timer;
+  const note = el("textarea", { class: "note", rows: "1", placeholder: "Note from the clips…", id: "note-" + p.id, oninput: (e) => { clearTimeout(timer); timer = setTimeout(() => save(p, { note: e.target.value }, true), 600); } });
+  note.value = r.note;
+  card.append(note);
+  return card;
+}
+
+const pending = new Map();
+async function save(p, patch, quiet) {
+  const body = { ...rec(p), ...patch, name: p.name, team: (saved[p.id] && saved[p.id].team) || teamById(current)?.name || "", updatedAt: new Date().toISOString() };
+  saved = { ...saved, [p.id]: body };
+  if (!quiet) { renderRoster(); renderTeams(); }
+  if (!store.writable) { setStatus("Not signed in: edits are not saved"); return; }
+  const prev = pending.get(p.id) || Promise.resolve();
+  const next = prev.then(() => store.savePlayer(p.id, body)).then(() => setStatus("Saved " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))).catch(e => setStatus("Save failed (" + e.code + ")"));
+  pending.set(p.id, next);
+  setStatus("Saving…", true);
+}
+
+async function saveList(kind, list) {
+  if (kind === "tags") tags = list; else todos = list;
+  renderTagManager(); renderRoster();
+  if (!store.writable) return;
+  setStatus("Saving…", true);
+  try { await store.saveConfig(kind, { list }); setStatus("Saved"); } catch (e) { setStatus("Save failed (" + e.code + ")"); }
+}
+
+function renderTagManager() {
+  for (const [kind, boxId, list, field] of [["tags", "#taglist", tagList(), "tags"], ["todos", "#todolist", todoList(), "todos"]]) {
+    const box = $(boxId); box.replaceChildren();
+    const counts = {}; for (const r of Object.values(saved)) for (const t of r[field] || []) counts[t] = (counts[t] || 0) + 1;
+    list.forEach((tg, i) => {
+      const inp = el("input", { value: tg, "aria-label": "Name", id: kind + "-" + i });
+      inp.addEventListener("change", () => renameIn(kind, field, tg, inp.value.trim()));
+      box.append(el("span", { class: "tagrow" }, inp, el("span", { class: "n" }, counts[tg] ? String(counts[tg]) : ""), el("button", { type: "button", title: "Remove", "aria-label": "Remove " + tg, onclick: () => saveList(kind, list.filter(t => t !== tg)) }, "×")));
+    });
+  }
+  $("#tpl-name").textContent = tplConfig && (tplConfig.assetId || tplConfig.url) ? `Uploaded template: ${tplConfig.name}` : "Built-in template (template.pptx)";
+  $("#tpl-reset").hidden = !(store.canUpload && tplConfig && (tplConfig.assetId || tplConfig.url));
+}
+async function renameIn(kind, field, from, to) {
+  const list = kind === "tags" ? tagList() : todoList();
+  if (!to || to === from) { renderTagManager(); return; }
+  await saveList(kind, [...new Set(list.map(t => t === from ? to : t))]);
+  for (const [id, r] of Object.entries(saved)) {
+    const patch = {};
+    if ((r[field] || []).includes(from)) patch[field] = [...new Set(r[field].map(t => t === from ? to : t))];
+    if (field === "tags" && (r.bullets || []).includes(from)) patch.bullets = r.bullets.map(t => t === from ? to : t);
+    if (Object.keys(patch).length) await save({ id, name: r.name, role: r.role }, patch, true);
+  }
+  renderRoster();
+}
+
+$("#addtag").addEventListener("submit", (e) => { e.preventDefault(); const v = $("#newtag").value.trim(); if (!v) return; $("#newtag").value = ""; saveList("tags", [...new Set([...tagList(), v])]); });
+$("#addtodo").addEventListener("submit", (e) => { e.preventDefault(); const v = $("#newtodo").value.trim(); if (!v) return; $("#newtodo").value = ""; saveList("todos", [...new Set([...todoList(), v])]); });
+$("#toggle-tags").addEventListener("click", (e) => { const m = $("#tagmgr"); m.hidden = !m.hidden; e.currentTarget.setAttribute("aria-expanded", String(!m.hidden)); });
+async function saveTeamCfg(id, patch) {
+  teamCfg = { ...teamCfg, [id]: { ...(teamCfg[id] || {}), ...patch } };
+  if (!store.writable) return; setStatus("Saving…", true);
+  try { await store.saveTeam(id, teamCfg[id]); setStatus("Saved"); } catch (e) { setStatus("Save failed (" + e.code + ")"); }
+}
+let shortTimer; $("#team-short").addEventListener("input", (e) => { clearTimeout(shortTimer); shortTimer = setTimeout(() => current && saveTeamCfg(current, { short: e.target.value.trim() }), 600); });
+$("#logo-upload").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f || !store.canUpload || !current) return;
+  setStatus("Uploading logo…", true);
+  try { const old = (teamCfg[current] || {}).logoAssetId; const up = await store.upload("logo", f, current); await saveTeamCfg(current, { logoUrl: up.url, logoAssetId: up.assetId || "", logoName: f.name, logoType: f.type }); await store.discard(old); renderRoster(); }
+  catch (err) { setStatus("Upload failed: " + (err && (err.code || err.message))); }
+  e.target.value = "";
+});
+$("#logo-remove").addEventListener("click", async () => { const old = (teamCfg[current] || {}).logoAssetId; await saveTeamCfg(current, { logoUrl: "", logoAssetId: "", logoName: "", logoType: "" }); await store.discard(old); renderRoster(); });
+$("#back-to-teams").addEventListener("click", () => document.querySelector(".rail").scrollIntoView({ behavior: "smooth", block: "start" }));
+$("#search").addEventListener("input", (e) => { query = e.target.value; renderTeams(); renderRoster(); });
+
+// ---- export rows: one per player, one column per slide variable ----
+function slideRows(t) {
+  return t.players.map(p => {
+    const r = rec(p);
+    const row = { team: t.name, competition: t.comp, player_id: p.id, name: p.first, surname: p.last, number: p.num, height: heightText(p.height), role: r.role, hand: handText(r.hand),
+      minutes: p.stats ? `${p.stats.min}’` : "", points: p.stats ? `${p.stats.pts} PTS` : "", stat_1: statVal(p, r.stat1), stat_2: statVal(p, r.stat2),
+      bullet_1: r.bullets[0] || "", bullet_2: r.bullets[1] || "", bullet_3: r.bullets[2] || "", to_do1: r.todos[0] || "", to_do2: r.todos[1] || "", to_do3: r.todos[2] || "",
+      iso: r.iso, close_out: r.closeout, markers: r.markers.join("; "), photo: PHOTO_IDS.has(p.id) ? `photos/${p.id}.jpg` : "", tags: r.tags.join("; "), note: r.note };
+    return row;
+  });
+}
+function toCsv(rows) {
+  const cols = Object.keys(rows[0] || {}); const esc = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  return [cols.join(","), ...rows.map(r => cols.map(c => esc(r[c])).join(","))].join("\n");
+}
+const fileStem = (t) => `${t.name.replace(/[^\w]+/g, "_")}_${TODAY}`;
+
+$("#copy-json").addEventListener("click", async (e) => {
+  const t = teamById(current); if (!t) return;
+  const text = JSON.stringify({ team: t.name, competition: t.comp, exported: new Date().toISOString(), players: slideRows(t) }, null, 2);
+  try { await navigator.clipboard.writeText(text); e.currentTarget.textContent = "Copied"; } catch { setStatus("Copy blocked by the browser"); }
+  setTimeout(() => e.currentTarget.textContent = "Copy JSON", 1500);
+});
+$("#export-csv").addEventListener("click", async () => {
+  const t = teamById(current); if (!t) return;
+  try { await store.saveFile(`scouting_${fileStem(t)}.csv`, "\ufeff" + toCsv(slideRows(t))); setStatus("CSV saved"); }
+  catch (err) { setStatus(err && err.code === "declined" ? "CSV not saved" : "CSV failed (" + (err && (err.code || err.message)) + ")"); }
+});
+
+// ---- PDF export (jsPDF, A4 portrait) ----
+async function photoData(id) {
+  if (!PHOTO_IDS.has(id)) return null;
+  try {
+    const res = await fetch("photos/" + id + ".jpg"); if (!res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const bmp = await createImageBitmap(new Blob([bytes], { type: "image/jpeg" }));
+    return { data: bytes, w: bmp.width, h: bmp.height };
+  } catch { return null; }
+}
+async function buildPdf(t) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const W = 210, M = 14, inner = W - 2 * M, PH = 18, PW = 14;
+  const g = nextGame(t);
+  let y = M;
+  const header = () => {
+    doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.text(t.name, M, y + 6);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(110);
+    doc.text(`${t.comp}${g ? ` · next game ${g.date} ${g.home ? "at home" : "away"}` : ""}`, M, y + 12);
+    doc.setTextColor(0); y += 18;
+    doc.setDrawColor(200); doc.line(M, y, W - M, y); y += 5;
+  };
+  const footer = () => {
+    doc.setFontSize(8); doc.setTextColor(120);
+    doc.text(`BC Roma opponent scouting · ${TODAY} · Giulia Martini`, M, 297 - 8);
+    doc.text(`${doc.getNumberOfPages()}`, W - M, 297 - 8, { align: "right" });
+    doc.setTextColor(0);
+  };
+  header();
+  for (const p of t.players) {
+    const r = rec(p);
+    doc.setFontSize(9);
+    const tw = inner - PW - 6;
+    const lines = [];
+    lines.push(...doc.splitTextToSize("Tags: " + (r.tags.length ? r.tags.join(" · ") : "—"), tw));
+    if (r.bullets.length) lines.push(...doc.splitTextToSize("Bullets: " + r.bullets.join(" · "), tw));
+    if (r.todos.length) lines.push(...doc.splitTextToSize("To do: " + r.todos.join(" · "), tw));
+    const extras = [r.iso ? "ISO: " + r.iso : "", r.closeout ? "close out " + r.closeout : "", r.markers.length ? "markers: " + r.markers.join(", ") : ""].filter(Boolean).join(" · ");
+    if (extras) lines.push(...doc.splitTextToSize(extras, tw));
+    const noteLines = r.note ? doc.splitTextToSize(r.note, tw) : [];
+    const rowH = Math.max(PH + 2, 4 + 4.5 + 4.5 + lines.length * 4 + noteLines.length * 4 + 2);
+    if (y + rowH > 297 - 16) { footer(); doc.addPage(); y = M; header(); }
+    const ph = await photoData(p.id);
+    if (ph) { const sc = Math.min(PW / ph.w, PH / ph.h); doc.addImage(ph.data, "JPEG", M, y, ph.w * sc, ph.h * sc); }
+    else { doc.setFillColor(235); doc.rect(M, y, PW, PH, "F"); }
+    const x = M + PW + 4; let ty = y + 4;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+    doc.text(`${p.num ? "#" + p.num + "  " : ""}${p.name}`, x, ty); ty += 4.5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(90);
+    const bio = [p.height ? p.height + " cm" : "", p.born ? "b. " + p.born : "", p.country].filter(Boolean).join(" · ");
+    const st = p.stats ? ` · ${p.stats.min} min, ${p.stats.pts} pts, ${statVal(p, r.stat1)}, ${statVal(p, r.stat2)}` : "";
+    doc.text(`${r.role || "role not set"} · hand: ${handText(r.hand) || "not set"}${bio ? " · " + bio : ""}${st}`, x, ty); ty += 4.5;
+    doc.setTextColor(0); doc.text(lines, x, ty); ty += lines.length * 4;
+    if (noteLines.length) { doc.setFont("helvetica", "italic"); doc.text(noteLines, x, ty); doc.setFont("helvetica", "normal"); ty += noteLines.length * 4; }
+    y += rowH; doc.setDrawColor(230); doc.line(M, y - 1, W - M, y - 1);
+  }
+  footer();
+  return doc.output("blob");
+}
+$("#export-pdf").addEventListener("click", async (e) => {
+  const t = teamById(current); if (!t) return;
+  const btn = e.currentTarget; btn.disabled = true; btn.textContent = "Building PDF…";
+  try { await store.saveFile(`scouting_${fileStem(t)}.pdf`, await buildPdf(t)); setStatus("PDF saved"); }
+  catch (err) { setStatus(err && err.code === "declined" ? "PDF not saved" : "PDF failed (" + (err && (err.code || err.message)) + ")"); }
+  btn.disabled = false; btn.textContent = "Export PDF";
+});
+
+// ---- PowerPoint: the template slide that carries {{name}} is repeated once per player ----
+const xesc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function mergeSplitPlaceholders(xml) {
+  // A placeholder typed in PowerPoint can be split over several runs ("{{" | "surname" | "}}"): join such runs into the first one.
+  return xml.replace(/<a:p>[\s\S]*?<\/a:p>/g, (para) => {
+    const runs = [...para.matchAll(/<a:r>([\s\S]*?)<\/a:r>/g)];
+    if (!runs.some(m => { const t = (m[1].match(/<a:t>([^<]*)<\/a:t>/) || [])[1] || ""; return t.includes("{{") !== t.includes("}}") || (t.includes("{{") && !/\{\{[^}]*\}\}/.test(t)); })) return para;
+    let out = para, i = 0;
+    while (i < runs.length) {
+      const text = (m) => (m[1].match(/<a:t>([^<]*)<\/a:t>/) || [, ""])[1];
+      let t = text(runs[i]);
+      if (t.includes("{{") && !t.includes("}}")) {
+        let j = i + 1, acc = t;
+        while (j < runs.length && !acc.includes("}}")) { acc += text(runs[j]); j++; }
+        const merged = runs[i][0].replace(/<a:t>[^<]*<\/a:t>/, "<a:t>" + acc + "</a:t>");
+        const group = runs.slice(i, j).map(m => m[0]).join("");
+        out = out.replace(group, merged);
+        i = j;
+      } else i++;
+    }
+    return out;
+  });
+}
+function shapeByName(xml, name) {
+  const i = xml.indexOf(`name="${name}"`); if (i < 0) return null;
+  const s = xml.lastIndexOf("<p:sp>", i), e = xml.indexOf("</p:sp>", i);
+  return s < 0 || e < 0 ? null : [s, e + 7];
+}
+function tableByName(xml, name) {
+  const i = xml.indexOf(`name="${name}"`); if (i < 0) return null;
+  const s = xml.lastIndexOf("<p:graphicFrame>", i), e = xml.indexOf("</p:graphicFrame>", i);
+  return s < 0 || e < 0 ? null : [s, e + 17];
+}
+function relAttrs(relsXml) { return [...relsXml.matchAll(/<Relationship\b([^>]*)\/>/g)].map(m => { const a = {}; for (const x of m[1].matchAll(/(\w+)="([^"]*)"/g)) a[x[1]] = x[2]; return a; }); }
+
+// The template travels as base64 text (the page's file store serves no .pptx): template.b64.txt, or an uploaded one.
+const b64ToBytes = (b64) => { const bin = atob(b64.replace(/\s+/g, "")); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
+const bytesToB64 = (bytes) => { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
+async function loadTemplate() {
+  const res = await fetch(store.templateUrl(), { cache: "no-store" }); if (!res.ok) throw new Error("template not found");
+  return store.templateIsB64() ? b64ToBytes(await res.text()) : new Uint8Array(await res.arrayBuffer());
+}
+
+async function buildPptx(t, onlyPlayers, progress) {
+  const zip = await JSZip.loadAsync(await loadTemplate());
+  const slidePaths = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f));
+  let tplPath = null, tplXml = null;
+  for (const f of slidePaths) { const x = await zip.file(f).async("string"); if (x.includes("{{name}}")) { tplPath = f; tplXml = x; break; } }
+  if (!tplPath) throw new Error("no slide with {{name}} in the template");
+  tplXml = mergeSplitPlaceholders(tplXml).replace(/<p:timing>[\s\S]*?<\/p:timing>/, "");
+  const relsOf = (p) => p.replace(/(slides|slideLayouts|slideMasters)\/([^/]+\.xml)$/, "$1/_rels/$2.rels");
+  let tplRels = await zip.file(relsOf(tplPath)).async("string");
+  let pres = await zip.file("ppt/presentation.xml").async("string");
+  let presRels = await zip.file("ppt/_rels/presentation.xml.rels").async("string");
+  let ct = await zip.file("[Content_Types].xml").async("string");
+  if (!/Extension="jpeg"/i.test(ct)) ct = ct.replace(/(<Types[^>]*>)/, '$1<Default Extension="jpeg" ContentType="image/jpeg"/>');
+  // The player slides get a copy of the template slide's layout without the opponent's logo: every picture in the
+  // layout whose name does not mention ROMA is dropped (the BC Roma head and logotype stay).
+  const layoutRel = relAttrs(tplRels).find(a => a.Type.endsWith("/slideLayout"));
+  if (layoutRel) {
+    const layoutPath = "ppt/" + layoutRel.Target.replace("../", "");
+    let lx = await zip.file(layoutPath).async("string");
+    const lxRels = await zip.file(relsOf(layoutPath)).async("string");
+    lx = lx.replace(/<p:pic>[\s\S]*?<\/p:pic>/g, (pic) => /name="[^"]*roma[^"]*"/i.test(pic) ? pic : "");
+    const layoutN = Math.max(...Object.keys(zip.files).filter(f => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(f)).map(f => +f.match(/slideLayout(\d+)/)[1])) + 1;
+    const newLayout = `ppt/slideLayouts/slideLayout${layoutN}.xml`;
+    zip.file(newLayout, lx); zip.file(relsOf(newLayout), lxRels);
+    ct = ct.replace("</Types>", `<Override PartName="/${newLayout}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/></Types>`);
+    const masterRel = relAttrs(lxRels).find(a => a.Type.endsWith("/slideMaster"));
+    if (masterRel) {
+      const masterPath = "ppt/" + masterRel.Target.replace("../", "");
+      let mx = await zip.file(masterPath).async("string"), mrels = await zip.file(relsOf(masterPath)).async("string");
+      const mr = relAttrs(mrels), rid = "rId" + (Math.max(...mr.map(a => +a.Id.replace("rId", ""))) + 1);
+      const lid = Math.max(2147483648, ...[...mx.matchAll(/<p:sldLayoutId id="(\d+)"/g)].map(m => +m[1])) + 1;
+      mrels = mrels.replace("</Relationships>", `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout${layoutN}.xml"/></Relationships>`);
+      mx = mx.replace("</p:sldLayoutIdLst>", `<p:sldLayoutId id="${lid}" r:id="${rid}"/></p:sldLayoutIdLst>`);
+      zip.file(masterPath, mx); zip.file(relsOf(masterPath), mrels);
+    }
+    tplRels = tplRels.replace(layoutRel.Target, `../slideLayouts/slideLayout${layoutN}.xml`);
+    // the other slides on that layout (cover, roster, stats, referees…) lose the opponent's logo the same way
+    for (const f of slidePaths) if (f !== tplPath) { const rp = relsOf(f), rx = await zip.file(rp).async("string"); if (rx.includes(`Target="${layoutRel.Target}"`)) zip.file(rp, rx.replace(`Target="${layoutRel.Target}"`, `Target="../slideLayouts/slideLayout${layoutN}.xml"`)); }
+  }
+  const rels = relAttrs(presRels);
+  const ridOf = (path) => rels.find(a => a.Target === path.replace("ppt/", "") && a.Type.endsWith("/slide"))?.Id;
+  const sldIds = [...pres.matchAll(/<p:sldId id="(\d+)" r:id="(rId\d+)"\/>/g)];
+  let nextId = Math.max(...sldIds.map(m => +m[1])) + 1, nextRid = Math.max(...rels.map(a => +a.Id.replace("rId", ""))) + 1;
+  let nextN = Math.max(...slidePaths.map(f => +f.match(/slide(\d+)\.xml/)[1])) + 1;
+  const entries = [];
+  const rows = slideRows(t);
+  for (let i = 0; i < t.players.length; i++) {
+    const p = t.players[i], row = rows[i], r = rec(p);
+    progress(`Slide ${i + 1} of ${t.players.length}…`);
+    let xml = tplXml, srels = tplRels;
+    const vars = { name: row.name, surname: row.surname.toUpperCase(), number: row.number, height: row.height, role: row.role, hand: row.hand, minutes: row.minutes, points: row.points, stat_1: row.stat_1, stat_2: row.stat_2,
+      bullet_1: row.bullet_1, bullet_2: row.bullet_2, bullet_3: row.bullet_3, to_do1: row.to_do1, to_do2: row.to_do2, to_do3: row.to_do3, iso: row.iso };
+    // photo: the {{photo}} text box becomes a picture in the left column (or disappears)
+    const ph = await photoData(p.id);
+    const pb = shapeByName(xml, "TextBox 12") || (() => { const i = xml.indexOf("{{photo}}"); return i < 0 ? null : [xml.lastIndexOf("<p:sp>", i), xml.indexOf("</p:sp>", i) + 7]; })();
+    if (pb) {
+      let picXml = "";
+      if (ph) {
+        const media = `ppt/media/scout_${p.id.replace(/[^\w]/g, "_")}.jpeg`;
+        zip.file(media, ph.data);
+        const rid = "rIdPhoto";
+        srels = srels.replace("</Relationships>", `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${media.split("/").pop()}"/></Relationships>`);
+        const bx = 284750, by = 1250000, bw = 2309403, bh = 3750000, sc = Math.min(bw / ph.w, bh / ph.h), cw = Math.round(ph.w * sc), chh = Math.round(ph.h * sc);
+        picXml = `<p:pic><p:nvPicPr><p:cNvPr id="900" name="Photo ${xesc(p.name)}" descr="${xesc(p.name)}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="${bx + Math.round((bw - cw) / 2)}" y="${by}"/><a:ext cx="${cw}" cy="${chh}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
+      }
+      xml = xml.slice(0, pb[0]) + picXml + xml.slice(pb[1]);
+    }
+    // close-out colour: the second row of the CLOSE OUT table
+    const tb = tableByName(xml, "Tableau 1-1-1-1-1-2-1-1");
+    if (tb) {
+      let tbl = xml.slice(tb[0], tb[1]);
+      const fill = r.closeout === "red" ? '<a:solidFill><a:srgbClr val="C31A00"/></a:solidFill>' : r.closeout === "yellow" ? '<a:solidFill><a:srgbClr val="FFC000"/></a:solidFill>' : "<a:noFill/>";
+      const k = tbl.lastIndexOf('<a:solidFill><a:srgbClr val="C31A00"/></a:solidFill>');
+      if (k >= 0) tbl = tbl.slice(0, k) + fill + tbl.slice(k + '<a:solidFill><a:srgbClr val="C31A00"/></a:solidFill>'.length);
+      xml = xml.slice(0, tb[0]) + tbl + xml.slice(tb[1]);
+    }
+    // Markers (🔑 key / 🚀 hot / 🎯 target, any combination): the template parks 🔑 and 🚀 off-slide; the chosen ones
+    // line up between CLOSE OUT and ISO, the others are dropped. 🎯 has no shape of its own: it is the 🔑 shape with the glyph swapped.
+    const MY = 5300000, slotX = (i) => 3700000 + i * 1600000;
+    const kb = shapeByName(xml, "🔑"), keyShape = kb ? xml.slice(kb[0], kb[1]) : "";
+    let slot = 0;
+    for (const [name, glyph] of MARKERS) {
+      const on = r.markers.includes(name), sb = shapeByName(xml, glyph);
+      if (sb) { let sp = xml.slice(sb[0], sb[1]); sp = on ? sp.replace(/<a:off x="-?\d+" y="-?\d+"\/>/, `<a:off x="${slotX(slot)}" y="${MY}"/>`) : ""; xml = xml.slice(0, sb[0]) + sp + xml.slice(sb[1]); }
+      else if (on && keyShape) { const sp = keyShape.replace(/🔑/g, glyph).replace(/<p:cNvPr id="\d+"/, `<p:cNvPr id="${901 + slot}"`).replace(/<a:off x="-?\d+" y="-?\d+"\/>/, `<a:off x="${slotX(slot)}" y="${MY}"/>`); xml = xml.replace("</p:spTree>", sp + "</p:spTree>"); }
+      if (on) slot++;
+    }
+    xml = xml.replace(/\{\{(\w+)\}\}/g, (m, k) => k in vars ? xesc(vars[k]) : "");
+    const path = `ppt/slides/slide${nextN}.xml`;
+    zip.file(path, xml); zip.file(relsOf(path), srels);
+    ct = ct.replace("</Types>", `<Override PartName="/${path}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>`);
+    presRels = presRels.replace("</Relationships>", `<Relationship Id="rId${nextRid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${nextN}.xml"/></Relationships>`);
+    entries.push(`<p:sldId id="${nextId}" r:id="rId${nextRid}"/>`);
+    nextId++; nextRid++; nextN++;
+  }
+  if (!onlyPlayers) await fillTeamSlides(zip, t, slidePaths.filter(f => f !== tplPath), relsOf);
+  // drop the template slide (and, if asked, every other original slide)
+  const removeSlide = async (path) => {
+    const rid = ridOf(path); if (!rid) return;
+    pres = pres.replace(new RegExp(`<p:sldId id="\\d+" r:id="${rid}"/>`), "");
+    presRels = presRels.replace(new RegExp(`<Relationship\\b[^>]*Id="${rid}"[^>]*/>`), "");
+    ct = ct.replace(new RegExp(`<Override PartName="/${path.replace(/[.]/g, "\\.")}"[^>]*/>`), "");
+    const sr = zip.file(relsOf(path)); if (sr) { for (const a of relAttrs(await sr.async("string"))) if (a.Type.endsWith("/notesSlide")) { const np = "ppt/" + a.Target.replace("../", ""); zip.remove(np); zip.remove(np.replace(/notesSlides\/(.*)$/, "notesSlides/_rels/$1.rels")); ct = ct.replace(new RegExp(`<Override PartName="/${np.replace(/[.]/g, "\\.")}"[^>]*/>`), ""); } }
+    zip.remove(path); zip.remove(relsOf(path));
+  };
+  const tplRid = ridOf(tplPath);
+  pres = pres.replace(new RegExp(`<p:sldId id="\\d+" r:id="${tplRid}"/>`), entries.join(""));
+  presRels = presRels.replace(new RegExp(`<Relationship\\b[^>]*Id="${tplRid}"[^>]*/>`), "");
+  ct = ct.replace(new RegExp(`<Override PartName="/${tplPath.replace(/[.]/g, "\\.")}"[^>]*/>`), "");
+  zip.remove(tplPath); zip.remove(relsOf(tplPath));
+  if (onlyPlayers) {
+    for (const f of slidePaths) if (f !== tplPath) await removeSlide(f);
+    // media no slide, layout or master refers to any more
+    const refs = new Set();
+    for (const f of Object.keys(zip.files)) if (f.endsWith(".rels")) for (const a of relAttrs(await zip.file(f).async("string"))) refs.add((a.Target || "").split("/").pop());
+    for (const f of Object.keys(zip.files)) if (!zip.files[f].dir && f.startsWith("ppt/media/") && !refs.has(f.split("/").pop())) zip.remove(f);
+  }
+  zip.file("ppt/presentation.xml", pres); zip.file("ppt/_rels/presentation.xml.rels", presRels); zip.file("[Content_Types].xml", ct);
+  return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation", compression: "DEFLATE" });
+}
+// ---- the team slides: cover (team + "GAME #n"), roster by position, season stats table ----
+const rowsOf = (tbl) => [...tbl.matchAll(/<a:tr h="(\d+)">([\s\S]*?)<\/a:tr>/g)];
+const cellsOf = (row) => [...row.matchAll(/<a:tc(?: [^>]*)?>[\s\S]*?<\/a:tc>/g)].map(m => m[0]);
+const cellText = (c) => [...c.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(m => m[1]).join("");
+function setCellText(c, text) {
+  let first = true;
+  const out = c.replace(/<a:r>[\s\S]*?<\/a:r>/g, (run) => { if (!first) return ""; first = false; return run.replace(/<a:t>[^<]*<\/a:t>/, "<a:t>" + xesc(text) + "</a:t>"); });
+  return first ? out : out;   // a cell without a run stays as it is (empty)
+}
+// a long surname is set smaller instead of wrapping: the cell's run size scales down past `fit` characters
+function fitCellText(c, text, fit) {
+  const out = setCellText(c, text);
+  if (text.length <= fit) return out;
+  return out.replace(/(<a:r><a:rPr[^>]*?)sz="(\d+)"/, (m, pre, sz) => `${pre}sz="${Math.max(1200, Math.floor(Number(sz) * fit / text.length))}"`);
+}
+const stripRowIds = (row) => row.replace(/<a:extLst>[\s\S]*?<\/a:extLst>/g, "");
+const makeRow = (h, cells) => `<a:tr h="${h}">${cells.join("")}</a:tr>`;
+const dec = (m, a) => a ? (m / a).toFixed(2) : "-";
+async function fillTeamSlides(zip, t, paths, relsOf) {
+  const g = nextGame(t) || t.games[t.games.length - 1];
+  const comp = t.comp === "LBA" ? "LBA" : "EUROCUP";
+  const short = shortName(t);
+  const cfg = teamCfg[t.id] || {};
+  let tplTeam = null;
+  const docs = {};
+  for (const f of paths) docs[f] = await zip.file(f).async("string");
+  // the template's own team name: the roster slide's title that is not "Roster"
+  for (const [f, x] of Object.entries(docs)) if (/<a:t>PG<\/a:t>/.test(x) && /<a:t>Roster<\/a:t>/i.test(x)) { const m = [...x.matchAll(/<a:t>([^<]{2,40})<\/a:t>/g)].map(m => m[1]).find(s => !/^(roster|pg|sg|sf|pf|c)$/i.test(s) && !/^#/.test(s)); if (m) tplTeam = m.trim(); }
+  for (const [f, x0] of Object.entries(docs)) {
+    let x = x0, rels = await zip.file(relsOf(f)).async("string"), changed = false;
+    if (tplTeam) { const re = new RegExp("<a:t>\\s*" + tplTeam.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*</a:t>", "gi"); if (re.test(x)) { x = x.replace(re, (m) => "<a:t>" + xesc(/[a-z]/.test(m.slice(5, -6)) ? short.charAt(0) + short.slice(1).toLowerCase() : short) + "</a:t>"); changed = true; } }
+    // cover: "EUROCUP - GAME #5" and the opponent's logo
+    if (/<a:t>[A-Z ]+ - GAME #\d+<\/a:t>/.test(x)) {
+      x = x.replace(/<a:t>[A-Z ]+ - GAME #\d+<\/a:t>/, `<a:t>${comp} - GAME #${g && g.n ? g.n : "?"}</a:t>`); changed = true;
+      const pics = [...x.matchAll(/<p:pic>[\s\S]*?<\/p:pic>/g)].filter(m => !/name="[^"]*roma[^"]*"/i.test(m[0]));
+      if (pics.length) {
+        const pic = pics[0][0];
+        let logo = null;
+        const lu = logoUrl(t);
+        if (lu) { try { const r = await fetch(lu); if (r.ok) { const bytes = new Uint8Array(await r.arrayBuffer()); const bmp = await createImageBitmap(new Blob([bytes])); logo = { bytes, w: bmp.width, h: bmp.height, ext: /jpe?g/i.test(cfg.logoType || "") ? "jpeg" : "png" }; } } catch {} }
+        if (logo) {
+          const media = `ppt/media/logo_${t.id.replace(/[^\w]/g, "_")}.${logo.ext}`; zip.file(media, logo.bytes);
+          rels = rels.replace("</Relationships>", `<Relationship Id="rIdLogo" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${media.split("/").pop()}"/></Relationships>`);
+          const box = pic.match(/<a:off x="(-?\d+)" y="(-?\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/);
+          let np = pic.replace(/r:embed="rId\d+"/, 'r:embed="rIdLogo"').replace(/name="[^"]*"/, `name="${xesc(short)} logo"`).replace(/descr="[^"]*"/, 'descr=""');
+          // the crest is sized like the BC Roma crest (about 2.9M EMU) and centred where the template's logo sat
+          if (box) { const [bx, by, bw, bh] = box.slice(1).map(Number), side = Math.max(bw, 2900000), sc = Math.min(side / logo.w, Math.max(bh, side) / logo.h), cw = Math.round(logo.w * sc), chh = Math.round(logo.h * sc); np = np.replace(box[0], `<a:off x="${bx + Math.round((bw - cw) / 2)}" y="${by + Math.round((bh - chh) / 2)}"/><a:ext cx="${cw}" cy="${chh}"/>`); }
+          x = x.replace(pic, np);
+        } else x = x.replace(pic, "");
+      }
+    }
+    // roster by position
+    if (/<a:t>PG<\/a:t>/.test(x) && /<a:t>SG<\/a:t>/.test(x)) {
+      const ti = x.indexOf("<a:tbl>"), te = x.indexOf("</a:tbl>", ti) + 8;
+      if (ti >= 0) {
+        const tbl = x.slice(ti, te), rows = rowsOf(tbl);
+        if (rows.length >= 4) {
+          const cols = { PG: [], SG: [], SF: [], PF: [], C: [] }, spare = [];
+          const byMin = (a, b) => ((b.stats && b.stats.min) || -1) - ((a.stats && a.stats.min) || -1);
+          for (const p of [...t.players].sort(byMin)) { const ro = (rec(p).role || "").split("/")[0]; (cols[ro] ? cols[ro] : spare).push(p); }
+          for (const p of spare) { const k = Object.keys(cols).sort((a, b) => cols[a].length - cols[b].length)[0]; cols[k].push(p); }
+          const order = ["PG", "SG", "SF", "PF", "C"], depth = Math.max(3, ...order.map(k => cols[k].length));
+          const header = rows[0][0];
+          // starters' photos
+          let photoRow = rows[1][0]; const pcells = cellsOf(rows[1][2]); let pr = 0;
+          const newCells = [];
+          for (let ci = 0, col = 0; ci < pcells.length; ci++) {
+            let c = pcells[ci];
+            if (/<a:blipFill/.test(c)) {
+              const p = cols[order[col++]][0], ph = p ? await photoData(p.id) : null;
+              if (ph) { const media = `ppt/media/roster_${p.id.replace(/[^\w]/g, "_")}.jpeg`; zip.file(media, ph.data); const rid = "rIdRoster" + (pr++); rels = rels.replace("</Relationships>", `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${media.split("/").pop()}"/></Relationships>`); c = c.replace(/r:embed="rId\d+"/, `r:embed="${rid}"`); }
+              else c = c.replace(/<a:blipFill[\s\S]*?<\/a:blipFill>/, "<a:noFill/>");
+            }
+            newCells.push(c);
+          }
+          // deeper benches: the photo row gives up height so the table still ends above the slide's bottom edge
+          const frameY = Number((x.match(/<p:xfrm><a:off x="-?\d+" y="(-?\d+)"\/>/) || [, 1764824])[1]);
+          const avail = 6858000 - 150000 - frameY - Number(rows[0][1]) - Number(rows[2][1]) - (depth - 1) * Number(rows[3][1]);
+          const photoH = Math.max(900000, Math.min(Number(rows[1][1]), avail));
+          photoRow = makeRow(photoH, newCells);
+          const starterCells = cellsOf(rows[2][2]), benchCells = cellsOf(rows[3][2]);
+          const dataRows = [];
+          for (let d = 0; d < depth; d++) {
+            const src = d === 0 ? starterCells : benchCells, cells = [];
+            order.forEach((k, i) => { const p = cols[k][d]; cells.push(setCellText(src[2 * i], p && p.num ? "#" + p.num : "")); cells.push(fitCellText(src[2 * i + 1], p ? p.last.toUpperCase() : "", 5)); });
+            dataRows.push(stripRowIds(makeRow(d === 0 ? rows[2][1] : rows[3][1], cells)));
+          }
+          const grid = tbl.slice(0, tbl.indexOf("<a:tr "));
+          x = x.slice(0, ti) + grid + header + photoRow + dataRows.join("") + "</a:tbl>" + x.slice(te); changed = true;
+          // the frame's declared height follows the rows
+          const total = [rows[0][1], photoH, rows[2][1], ...Array(depth - 1).fill(rows[3][1])].reduce((s, h) => s + Number(h), 0);
+          x = x.replace(/(name="[^"]*"[\s\S]*?<p:xfrm>[\s\S]*?<a:ext cx="\d+" cy=")\d+(")/, `$1${total}$2`);
+        }
+      }
+    }
+    // season stats table
+    if (/<a:t>FGM-A<\/a:t>/.test(x)) {
+      const ti = x.indexOf("<a:tbl>"), te = x.indexOf("</a:tbl>", ti) + 8;
+      const tbl = x.slice(ti, te), rows = rowsOf(tbl);
+      if (rows.length >= 2) {
+        const src = cellsOf(rows[1][2]);
+        const players = t.players.filter(p => p.stats).sort((a, b) => (Number(a.num) || 999) - (Number(b.num) || 999));
+        const dataRows = players.map(p => {
+          const s = p.stats, fgm = +(s.fg2m + s.fg3m).toFixed(1), fga = +(s.fg2a + s.fg3a).toFixed(1);
+          const vals = [p.num, p.last, `${s.min}’`, s.pts, `${fgm}-${fga}`, dec(fgm, fga), `${s.fg3m}-${s.fg3a}`, dec(s.fg3m, s.fg3a), `${s.ftm}-${s.fta}`, dec(s.ftm, s.fta), s.oreb, +(s.reb - s.oreb).toFixed(1), s.reb, s.ast, s.to, s.stl, s.blk];
+          return stripRowIds(makeRow(rows[1][1], src.map((c, i) => setCellText(c, i < vals.length ? String(vals[i]) : ""))));
+        });
+        const grid = tbl.slice(0, tbl.indexOf("<a:tr "));
+        x = x.slice(0, ti) + grid + rows[0][0] + dataRows.join("") + "</a:tbl>" + x.slice(te); changed = true;
+        const total = Number(rows[0][1]) + players.length * Number(rows[1][1]);
+        x = x.replace(/(name="[^"]*"[\s\S]*?<p:xfrm>[\s\S]*?<a:ext cx="\d+" cy=")\d+(")/, `$1${total}$2`);
+      }
+    }
+    if (changed) { zip.file(f, x); zip.file(relsOf(f), rels); }
+  }
+}
+$("#export-pptx").addEventListener("click", async (e) => {
+  const t = teamById(current); if (!t) return;
+  const btn = e.currentTarget; btn.disabled = true;
+  try {
+    const blob = await buildPptx(t, $("#only-players").checked, (m) => btn.textContent = m);
+    await store.saveFile(`scouting_${fileStem(t)}.pptx`, blob); setStatus("PowerPoint saved");
+  } catch (err) { setStatus(err && err.code === "declined" ? "PowerPoint not saved" : "PowerPoint failed: " + (err && (err.code || err.message))); }
+  btn.disabled = false; btn.textContent = "Build PowerPoint";
+});
+$("#tpl-upload").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f || !store.canUpload || !store.writable) return;
+  setStatus("Uploading template…", true);
+  try {
+    const up = await store.upload("template", f);
+    const old = tplConfig && tplConfig.assetId;
+    tplConfig = { url: up.url, assetId: up.assetId || "", b64: !!up.b64, name: f.name, uploadedAt: new Date().toISOString() };
+    await store.saveConfig("template", tplConfig);
+    await store.discard(old);
+    renderTagManager(); setStatus("Template uploaded");
+  } catch (err) { setStatus("Upload failed: " + (err && (err.code || err.message))); }
+  e.target.value = "";
+});
+$("#tpl-reset").addEventListener("click", async () => {
+  if (!store.writable) return; const old = tplConfig && tplConfig.assetId; tplConfig = null;
+  try { await store.saveConfig("template", null); await store.discard(old); } catch {}
+  renderTagManager();
+});
+// browser-only mode (GitHub Pages, a plain file server): the notes live in this browser; carry them as scouting.json
+$("#export-state").addEventListener("click", () => store.saveFile("scouting.json", JSON.stringify(store.state, null, 2)));
+$("#import-state").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try { const s = JSON.parse(await f.text()); store.state = s; store.local(); applyState(); setStatus("scouting.json imported"); } catch { setStatus("Not a scouting.json file"); }
+  e.target.value = "";
+});
+function applyState() { const s = store.state; tags = s.tags && s.tags.list || null; todos = s.todos && s.todos.list || null; tplConfig = s.template || null; teamCfg = s.teams || {}; saved = s.players || {}; renderTagManager(); renderTeams(); renderRoster(); }
+
+async function boot() {
+  try { DATA = await (await fetch("data/rosters.json", { cache: "no-store" })).json(); }
+  catch { setStatus("data/rosters.json not found: run build.py"); return; }
+  ROSTERS = DATA.teams; ASOF = DATA.asof; PHOTO_IDS = new Set(DATA.photos || []); LOGO_IDS = new Set(DATA.logos || []);
+  $("#foot").append(`Rosters and season averages from bc-roma-2627-analysis (data/team_rosters.csv, data/eurocup/people.csv, data/box_scores.csv, data/eurocup_2026_raw.txt) as of ${ASOF}; the league's listed role is the starting value. Author: Giulia Martini.`);
+  renderTagManager(); renderTeams();
+  const firstUp = ROSTERS.find(nextGame); if (firstUp) select(firstUp.id);
+  await store.detect();
+  const dl = store.mode !== "artifact" || !!store.downloads;
+  if (dl) { $("#export-csv").hidden = false; if (window.jspdf) $("#export-pdf").hidden = false; if (window.JSZip) { $("#export-pptx").hidden = false; $("#only-players-opt").hidden = false; } }
+  if (store.canUpload) { $("#tpl-upload-lbl").hidden = false; $("#logo-upload-lbl").hidden = false; }
+  if (store.mode === "local") { $("#export-state").hidden = false; $("#import-state-lbl").hidden = false; setStatus("Browser-only mode: notes stay in this browser; export scouting.json to keep them"); }
+  if (!store.writable) { setStatus("Not signed in: edits are not saved"); return; }
+  store.subscribe({
+    tags: (l) => { tags = l; renderTagManager(); renderRoster(); },
+    todos: (l) => { todos = l; renderTagManager(); renderRoster(); },
+    template: (c) => { tplConfig = c; renderTagManager(); },
+    teams: (m) => { teamCfg = m; if (document.activeElement !== $("#team-short")) renderRoster(); },
+    players: (m) => {
+      saved = m; renderTeams(); renderTagManager();
+      const a = document.activeElement;
+      if (!(a && (a.classList.contains("note") || a.type === "text"))) renderRoster();
+      setStatus(Object.keys(saved).length + " players with notes" + (store.mode === "server" ? " · saving to data/scouting.json" : ""));
+    }
+  });
+}
+boot();
+</script>
+</body>
+</html>
