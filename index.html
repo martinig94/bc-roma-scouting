@@ -512,6 +512,18 @@ async function photoData(id) {
     return { data: bytes, w: bmp.width, h: bmp.height };
   } catch { return null; }
 }
+// PowerPoint head shot: a top-centred 4:5 box, 55% of the photo's width, starting 2% from the top.
+// Square images (club logos standing in for a photo) are kept whole.
+const HEAD_W = 0.55, HEAD_ASPECT = 1.25, HEAD_TOP = 0.02;
+async function headshotData(id) {
+  const ph = await photoData(id);
+  if (!ph || ph.h < ph.w * 1.1) return ph;
+  const cw = Math.round(ph.w * HEAD_W), ch = Math.min(Math.round(cw * HEAD_ASPECT), ph.h);
+  const canvas = new OffscreenCanvas(cw, ch);
+  canvas.getContext("2d").drawImage(await createImageBitmap(new Blob([ph.data], { type: "image/jpeg" })), Math.round((ph.w - cw) / 2), Math.round(ph.h * HEAD_TOP), cw, ch, 0, 0, cw, ch);
+  const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.92 });
+  return { data: new Uint8Array(await blob.arrayBuffer()), w: cw, h: ch };
+}
 async function buildPdf(t) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -667,7 +679,7 @@ async function buildPptx(t, onlyPlayers, progress) {
     const vars = { name: row.name, surname: row.surname.toUpperCase(), number: row.number, height: row.height, role: row.role, hand: row.hand, minutes: row.minutes, points: row.points, stat_1: row.stat_1, stat_2: row.stat_2,
       bullet_1: row.bullet_1, bullet_2: row.bullet_2, bullet_3: row.bullet_3, to_do1: row.to_do1, to_do2: row.to_do2, to_do3: row.to_do3, iso: row.iso };
     // photo: the {{photo}} text box becomes a picture in the left column (or disappears)
-    const ph = await photoData(p.id);
+    const ph = await headshotData(p.id);
     const pb = shapeByName(xml, "TextBox 12") || (() => { const i = xml.indexOf("{{photo}}"); return i < 0 ? null : [xml.lastIndexOf("<p:sp>", i), xml.indexOf("</p:sp>", i) + 7]; })();
     if (pb) {
       let picXml = "";
@@ -802,7 +814,7 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
           for (let ci = 0, col = 0; ci < pcells.length; ci++) {
             let c = pcells[ci];
             if (/<a:blipFill/.test(c)) {
-              const p = cols[order[col++]][0], ph = p ? await photoData(p.id) : null;
+              const p = cols[order[col++]][0], ph = p ? await headshotData(p.id) : null;
               if (ph) { const media = `ppt/media/roster_${p.id.replace(/[^\w]/g, "_")}.jpeg`; zip.file(media, ph.data); const rid = "rIdRoster" + (pr++); rels = rels.replace("</Relationships>", `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${media.split("/").pop()}"/></Relationships>`); c = c.replace(/r:embed="rId\d+"/, `r:embed="${rid}"`); }
               else c = c.replace(/<a:blipFill[\s\S]*?<\/a:blipFill>/, "<a:noFill/>");
             }
