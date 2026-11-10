@@ -64,13 +64,22 @@
    "updatedAt": "2026-11-05T13:10:39.969Z"
   },
   "ec-ULM-Nil_Failenschmid": {
+   "bullets": [],
+   "closeout": "",
+   "exclude": false,
    "hand": "",
+   "iso": "",
+   "markers": [],
    "name": "Nil Failenschmid",
    "note": "",
-   "role": "SF",
+   "role": "PG",
+   "slot": "",
+   "stat1": "reb",
+   "stat2": "ast",
    "tags": [],
    "team": "Ratiopharm Ulm",
-   "updatedAt": "2026-10-29T14:38:24.293Z"
+   "todos": [],
+   "updatedAt": "2026-11-10T20:32:48.390Z"
   },
   "lba-2293": {
    "hand": "R",
@@ -197,6 +206,24 @@
    "team": "Longobardi Scafati Basket",
    "updatedAt": "2026-10-28T09:42:01.110Z"
   },
+  "lba-9341": {
+   "bullets": [],
+   "closeout": "",
+   "exclude": false,
+   "hand": "",
+   "iso": "",
+   "markers": [],
+   "name": "Andrew Andrews",
+   "note": "",
+   "role": "PG",
+   "slot": "PF",
+   "stat1": "reb",
+   "stat2": "ast",
+   "tags": [],
+   "team": "Tezenis Verona",
+   "todos": [],
+   "updatedAt": "2026-11-10T20:22:59.166Z"
+  },
   "lba-9346": {
    "hand": "R",
    "name": "Brandon Johnson",
@@ -246,6 +273,26 @@
    ],
    "team": "Longobardi Scafati Basket",
    "updatedAt": "2026-10-28T09:39:22.619Z"
+  },
+  "lba-9350": {
+   "bullets": [],
+   "closeout": "",
+   "exclude": false,
+   "hand": "",
+   "iso": "",
+   "markers": [],
+   "name": "Matteo Oliveri",
+   "note": "",
+   "role": "SG/SF",
+   "slot": "",
+   "stat1": "reb",
+   "stat2": "ast",
+   "tags": [
+    "turnover-prone"
+   ],
+   "team": "Tezenis Verona",
+   "todos": [],
+   "updatedAt": "2026-11-10T20:22:38.446Z"
   }
  },
  "tags": {
@@ -278,7 +325,37 @@
    "iso"
   ]
  },
- "teams": {},
+ "teams": {
+  "ec-ULM": {
+   "rosterOrder": {
+    "C": [
+     "ec-ULM-Simisola_Shittu",
+     "ec-ULM-Juom_Maker_Bol"
+    ],
+    "PF": [],
+    "PG": [],
+    "SF": [
+     "ec-ULM-Armel_Traore",
+     "ec-ULM-Meissa_Faye",
+     "ec-ULM-Michael_Rataj",
+     "ec-ULM-Lenny_Liedtke",
+     "ec-ULM-Dwayne_Koroma"
+    ],
+    "SG": [
+     "ec-ULM-Ibi_Watson",
+     "ec-ULM-Jaylen_Sims",
+     "ec-ULM-Adam_Atamna",
+     "ec-ULM-Lucas_Fischer",
+     "ec-ULM-Marvin_Heckel",
+     "ec-ULM-Devin_Schmidt",
+     "ec-ULM-Nil_Failenschmid",
+     "ec-ULM-Cj_Anthony_Jr.",
+     "ec-ULM-Teo_Milicic",
+     "ec-ULM-Namori_Omog"
+    ]
+   }
+  }
+ },
  "template": null,
  "todos": null
 }
