@@ -296,10 +296,14 @@ const MARKERS = [["target", "🎯", "target"]];   // earlier key/hot markers sta
 const rec = (p) => { const s = saved[p.id] || {}; const r = { ...EMPTY(), role: p.role || "", ...s }; if (!s.markers) r.markers = s.marker ? [s.marker] : [s.key && "key", s.hot && "hot"].filter(Boolean); return r; };
 const teamById = (id) => ROSTERS.find(t => t.id === id);
 const tagList = () => tags || DEFAULT_TAGS, todoList = () => todos || DEFAULT_TODOS;
-const touched = (r) => !!(r && (r.hand || (r.tags || []).length || (r.todos || []).length || r.note || r.iso));
+const touched = (r) => !!(r && (r.hand || (r.tags || []).length || (r.todos || []).length || r.note || ISO_TEXT[r.iso]));
 const statVal = (p, k) => { const s = p.stats; if (!s || s[k] == null) return ""; const lbl = STATS.find(x => x[0] === k)?.[1] || k.toUpperCase(); return lbl.endsWith("%") ? `${s[k]}% ${lbl.slice(0, -1)}` : `${s[k]} ${lbl}`; };
 const heightText = (cm) => { if (!cm) return ""; const inch = Math.round(Number(cm) / 2.54); return `${cm} - ${Math.floor(inch / 12)}’${inch % 12}’’`; };
 const handText = (h) => ({ L: "Left", R: "Right", "?": "?" })[h] || "";
+const ISO_TEXT = { left: "PUSH LEFT", right: "PUSH RIGHT" };   // the only ISO calls; older free-text notes read as none
+// slide colours: left hand / push left, minutes and points in blue; right hand / push right and the two picked stats in red
+const BLUE = "4472C4", RED = "B70908";
+const sideColor = (v) => ({ L: BLUE, left: BLUE, R: RED, right: RED })[v] || BLUE;
 
 function setStatus(text, saving) { const s = $("#status"); s.textContent = text; s.classList.toggle("saving", !!saving); }
 
@@ -432,8 +436,9 @@ function playerCard(p) {
   for (const [v, glyph, lbl] of MARKERS) mk.append(el("button", { class: "chip", "aria-pressed": String(r.markers.includes(v)), onclick: () => save(p, { markers: r.markers.includes(v) ? r.markers.filter(x => x !== v) : [...r.markers.filter(x => x !== v), v] }) }, `${glyph} ${lbl}`));
   fields.append(mk);
   fields.append(el("span", { class: "group" }, el("span", { class: "lbl" }, "Deck"), el("button", { class: "chip", "aria-pressed": String(!!r.exclude), title: "Leave this player out of the slides, the roster and the stats table", onclick: () => save(p, { exclude: !r.exclude }) }, r.exclude ? "excluded" : "in the deck")));
-  let isoTimer; const iso = el("input", { type: "text", id: "iso-" + p.id, placeholder: "ISO note", oninput: (e) => { clearTimeout(isoTimer); isoTimer = setTimeout(() => save(p, { iso: e.target.value }, true), 600); } }); iso.value = r.iso;
-  fields.append(el("span", { class: "group" }, el("span", { class: "lbl" }, "ISO"), iso));
+  const iso = el("span", { class: "group" }, el("span", { class: "lbl" }, "ISO"));
+  for (const [v, lbl] of [["", "none"], ...Object.entries(ISO_TEXT)]) iso.append(el("button", { class: "chip", "aria-pressed": String((ISO_TEXT[r.iso] ? r.iso : "") === v), onclick: () => save(p, { iso: v }) }, lbl.toLowerCase()));
+  fields.append(iso);
   card.append(fields);
 
   let timer;
@@ -516,7 +521,7 @@ function slideRows(t) {
     const row = { team: t.name, competition: t.comp, player_id: p.id, name: p.first, surname: p.last, number: p.num, height: heightText(p.height), role: r.role, hand: handText(r.hand),
       minutes: p.stats ? `${p.stats.min}’` : "", points: p.stats ? `${p.stats.pts} PTS` : "", stat_1: statVal(p, r.stat1), stat_2: statVal(p, r.stat2),
       bullet_1: r.bullets[0] || "", bullet_2: r.bullets[1] || "", bullet_3: r.bullets[2] || "", to_do1: r.todos[0] || "", to_do2: r.todos[1] || "", to_do3: r.todos[2] || "",
-      iso: r.iso, close_out: r.closeout, target: r.markers.includes("target") ? 1 : 0, in_deck: r.exclude ? 0 : 1, photo: PHOTO_IDS.has(p.id) ? `photos/${p.id}.jpg` : "", tags: r.tags.join("; "), note: r.note };
+      iso: ISO_TEXT[r.iso] || "", close_out: r.closeout, target: r.markers.includes("target") ? 1 : 0, in_deck: r.exclude ? 0 : 1, photo: PHOTO_IDS.has(p.id) ? `photos/${p.id}.jpg` : "", tags: r.tags.join("; "), note: r.note };
     return row;
   });
 }
@@ -588,7 +593,7 @@ async function buildPdf(t) {
     lines.push(...doc.splitTextToSize("Tags: " + (r.tags.length ? r.tags.join(" · ") : "—"), tw));
     if (r.bullets.length) lines.push(...doc.splitTextToSize("Bullets: " + r.bullets.join(" · "), tw));
     if (r.todos.length) lines.push(...doc.splitTextToSize("To do: " + r.todos.join(" · "), tw));
-    const extras = [r.iso ? "ISO: " + r.iso : "", r.closeout ? "close out " + r.closeout : "", r.markers.includes("target") ? "target" : "", r.exclude ? "not in the deck" : ""].filter(Boolean).join(" · ");
+    const extras = [ISO_TEXT[r.iso] ? "ISO: " + ISO_TEXT[r.iso].toLowerCase() : "", r.closeout ? "close out " + r.closeout : "", r.markers.includes("target") ? "target" : "", r.exclude ? "not in the deck" : ""].filter(Boolean).join(" · ");
     if (extras) lines.push(...doc.splitTextToSize(extras, tw));
     const noteLines = r.note ? doc.splitTextToSize(r.note, tw) : [];
     const rowH = Math.max(PH + 2, 4 + 4.5 + 4.5 + lines.length * 4 + noteLines.length * 4 + 2);
@@ -651,6 +656,36 @@ function tableByName(xml, name) {
   const s = xml.lastIndexOf("<p:graphicFrame>", i), e = xml.indexOf("</p:graphicFrame>", i);
   return s < 0 || e < 0 ? null : [s, e + 17];
 }
+// the scouted team's crest: {bytes, w, h, ext}, or null when it has none or it cannot be fetched
+async function teamLogo(t) {
+  const lu = logoUrl(t); if (!lu) return null;
+  try {
+    const r = await fetch(lu); if (!r.ok) return null;
+    const bytes = new Uint8Array(await r.arrayBuffer()), bmp = await createImageBitmap(new Blob([bytes]));
+    return { bytes, w: bmp.width, h: bmp.height, ext: /jpe?g/i.test((teamCfg[t.id] || {}).logoType || "") ? "jpeg" : "png" };
+  } catch (e) { console.warn("team logo not loaded", e); return null; }
+}
+// the reference deck's top-right crest box on the roster, stats and player slides (x, y, w, h in EMU)
+const LOGO_BOX = [11099800, 114300, 1003300, 1003300];
+// a picture pointed at another image, renamed, and fitted (aspect kept, centred) in box, or in its own frame
+function fitPic(pic, rid, name, img, box) {
+  const own = pic.match(/<a:off x="(-?\d+)" y="(-?\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/);
+  const [bx, by, bw, bh] = box || own.slice(1).map(Number), sc = Math.min(bw / img.w, bh / img.h), cw = Math.round(img.w * sc), ch = Math.round(img.h * sc);
+  return pic.replace(/r:embed="rId\w+"/, `r:embed="${rid}"`).replace(/name="[^"]*"/, `name="${xesc(name)}"`).replace(/descr="[^"]*"/, 'descr=""')
+    .replace(own[0], `<a:off x="${Math.round(bx + (bw - cw) / 2)}" y="${Math.round(by + (bh - ch) / 2)}"/><a:ext cx="${cw}" cy="${ch}"/>`);
+}
+// the text run that carries {{key}}, rewritten by fn
+const withRun = (xml, key, fn) => xml.replace(new RegExp(`<a:r>(?:(?!</a:r>)[\\s\\S])*?\\{\\{${key}\\}\\}[\\s\\S]*?</a:r>`), fn);
+// a run's text colour (and, when given, its weight) set in its own properties
+function styleRun(run, hex, bold) {
+  const r = /<a:rPr\b/.test(run) ? run.replace(/<a:rPr\b([^>]*?)\/>/, "<a:rPr$1></a:rPr>") : run.replace("<a:r>", "<a:r><a:rPr></a:rPr>");
+  return r.replace(/<a:rPr\b([^>]*)>([\s\S]*?)<\/a:rPr>/, (m, attrs, body) => {
+    const a = bold == null ? attrs : attrs.replace(/ b="\d"/, "") + ` b="${bold ? 1 : 0}"`;
+    const rest = body.replace(/<a:solidFill>[\s\S]*?<\/a:solidFill>/g, ""), ln = rest.match(/^<a:ln\b[\s\S]*?(?:<\/a:ln>|\/>)/);
+    const fill = `<a:solidFill><a:srgbClr val="${hex}"/></a:solidFill>`;
+    return `<a:rPr${a}>${ln ? ln[0] + fill + rest.slice(ln[0].length) : fill + rest}</a:rPr>`;
+  });
+}
 function relAttrs(relsXml) { return [...relsXml.matchAll(/<Relationship\b([^>]*)\/>/g)].map(m => { const a = {}; for (const x of m[1].matchAll(/(\w+)="([^"]*)"/g)) a[x[1]] = x[2]; return a; }); }
 
 // The template travels as base64 text (the page's file store serves no .pptx): template.b64.txt, or an uploaded one.
@@ -669,36 +704,24 @@ async function buildPptx(t, onlyPlayers, progress) {
   if (!tplPath) throw new Error("no slide with {{name}} in the template");
   tplXml = mergeSplitPlaceholders(tplXml).replace(/<p:timing>[\s\S]*?<\/p:timing>/, "");
   const relsOf = (p) => p.replace(/(slides|slideLayouts|slideMasters)\/([^/]+\.xml)$/, "$1/_rels/$2.rels");
-  let tplRels = await zip.file(relsOf(tplPath)).async("string");
+  const tplRels = await zip.file(relsOf(tplPath)).async("string");
   let pres = await zip.file("ppt/presentation.xml").async("string");
   let presRels = await zip.file("ppt/_rels/presentation.xml.rels").async("string");
   let ct = await zip.file("[Content_Types].xml").async("string");
   if (!/Extension="jpeg"/i.test(ct)) ct = ct.replace(/(<Types[^>]*>)/, '$1<Default Extension="jpeg" ContentType="image/jpeg"/>');
-  // The player slides get a copy of the template slide's layout without the opponent's logo: every picture in the
-  // layout whose name does not mention ROMA is dropped (the BC Roma head and logotype stay).
-  const layoutRel = relAttrs(tplRels).find(a => a.Type.endsWith("/slideLayout"));
-  if (layoutRel) {
-    const layoutPath = "ppt/" + layoutRel.Target.replace("../", "");
-    let lx = await zip.file(layoutPath).async("string");
-    const lxRels = await zip.file(relsOf(layoutPath)).async("string");
-    lx = lx.replace(/<p:pic>[\s\S]*?<\/p:pic>/g, (pic) => /name="[^"]*roma[^"]*"/i.test(pic) ? pic : "");
-    const layoutN = Math.max(...Object.keys(zip.files).filter(f => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(f)).map(f => +f.match(/slideLayout(\d+)/)[1])) + 1;
-    const newLayout = `ppt/slideLayouts/slideLayout${layoutN}.xml`;
-    zip.file(newLayout, lx); zip.file(relsOf(newLayout), lxRels);
-    ct = ct.replace("</Types>", `<Override PartName="/${newLayout}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/></Types>`);
-    const masterRel = relAttrs(lxRels).find(a => a.Type.endsWith("/slideMaster"));
-    if (masterRel) {
-      const masterPath = "ppt/" + masterRel.Target.replace("../", "");
-      let mx = await zip.file(masterPath).async("string"), mrels = await zip.file(relsOf(masterPath)).async("string");
-      const mr = relAttrs(mrels), rid = "rId" + (Math.max(...mr.map(a => +a.Id.replace("rId", ""))) + 1);
-      const lid = Math.max(2147483648, ...[...mx.matchAll(/<p:sldLayoutId id="(\d+)"/g)].map(m => +m[1])) + 1;
-      mrels = mrels.replace("</Relationships>", `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout${layoutN}.xml"/></Relationships>`);
-      mx = mx.replace("</p:sldLayoutIdLst>", `<p:sldLayoutId id="${lid}" r:id="${rid}"/></p:sldLayoutIdLst>`);
-      zip.file(masterPath, mx); zip.file(relsOf(masterPath), mrels);
-    }
-    tplRels = tplRels.replace(layoutRel.Target, `../slideLayouts/slideLayout${layoutN}.xml`);
-    // the other slides on that layout (cover, roster, stats, referees…) lose the opponent's logo the same way
-    for (const f of slidePaths) if (f !== tplPath) { const rp = relsOf(f), rx = await zip.file(rp).async("string"); if (rx.includes(`Target="${layoutRel.Target}"`)) zip.file(rp, rx.replace(`Target="${layoutRel.Target}"`, `Target="../slideLayouts/slideLayout${layoutN}.xml"`)); }
+  // Every layout picture whose name does not mention ROMA is the template opponent's logo (top right of the roster,
+  // stats, player and referee slides): it becomes the scouted team's logo, fitted in the reference deck's box, or goes.
+  const logo = await teamLogo(t);
+  if (logo) { const media = `ppt/media/logo_${t.id.replace(/[^\w]/g, "_")}.${logo.ext}`; zip.file(media, logo.bytes); logo.target = "../media/" + media.split("/").pop(); }
+  if (!/Extension="png"/i.test(ct)) ct = ct.replace(/(<Types[^>]*>)/, '$1<Default Extension="png" ContentType="image/png"/>');
+  for (const lp of Object.keys(zip.files).filter(f => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(f))) {
+    const lx = await zip.file(lp).async("string");
+    const pics = [...lx.matchAll(/<p:pic>[\s\S]*?<\/p:pic>/g)].map(m => m[0]).filter(pic => !/name="[^"]*roma[^"]*"/i.test(pic));
+    if (!pics.length) continue;
+    let out = lx, lrels = await zip.file(relsOf(lp)).async("string");
+    if (logo) lrels = lrels.replace("</Relationships>", `<Relationship Id="rIdTeamLogo" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${logo.target}"/></Relationships>`);
+    for (const pic of pics) out = out.replace(pic, logo ? fitPic(pic, "rIdTeamLogo", `${shortName(t)} logo`, logo, LOGO_BOX) : "");
+    zip.file(lp, out); zip.file(relsOf(lp), lrels);
   }
   const rels = relAttrs(presRels);
   const ridOf = (path) => rels.find(a => a.Target === path.replace("ppt/", "") && a.Type.endsWith("/slide"))?.Id;
@@ -748,6 +771,9 @@ async function buildPptx(t, onlyPlayers, progress) {
       const sp = keyShape.replace(/🔑/g, "🎯").replace(/<p:cNvPr id="\d+"/, '<p:cNvPr id="901"').replace(/<a:off x="-?\d+" y="-?\d+"\/>/, `<a:off x="${Math.round((12192000 - cx) / 2)}" y="${MY}"/>`);
       xml = xml.replace("</p:spTree>", sp + "</p:spTree>");
     }
+    for (const [k, hex] of [["hand", sideColor(r.hand)], ["minutes", BLUE], ["points", BLUE], ["stat_1", RED], ["stat_2", RED]]) xml = withRun(xml, k, (run) => styleRun(run, hex));
+    // ISO: "PUSH" regular, the side in bold, both in the side's colour
+    xml = withRun(xml, "iso", (run) => { const side = vars.iso.split(" ")[1]; return side ? styleRun(run.replace("{{iso}}", "PUSH "), sideColor(r.iso), false) + styleRun(run.replace("{{iso}}", side), sideColor(r.iso), true) : run; });
     xml = xml.replace(/\{\{(\w+)\}\}/g, (m, k) => k in vars ? xesc(vars[k]) : "");
     const path = `ppt/slides/slide${nextN}.xml`;
     zip.file(path, xml); zip.file(relsOf(path), srels);
@@ -798,12 +824,11 @@ function fitCellText(c, text, fit) {
 }
 const stripRowIds = (row) => row.replace(/<a:extLst>[\s\S]*?<\/a:extLst>/g, "");
 const makeRow = (h, cells) => `<a:tr h="${h}">${cells.join("")}</a:tr>`;
-const dec = (m, a) => a ? (m / a).toFixed(2) : "-";
+const pct = (m, a) => a ? `${Math.round(100 * m / a)}%` : "-";
 async function fillTeamSlides(zip, t, paths, relsOf) {
   const g = nextGame(t) || t.games[t.games.length - 1];
   const comp = t.comp === "LBA" ? "LBA" : "EUROCUP";
   const short = shortName(t);
-  const cfg = teamCfg[t.id] || {};
   let tplTeam = null;
   const docs = {};
   for (const f of paths) docs[f] = await zip.file(f).async("string");
@@ -817,18 +842,14 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
       x = x.replace(/<a:t>[A-Z ]+ - GAME #\d+<\/a:t>/, `<a:t>${comp} - GAME #${g && g.n ? g.n : "?"}</a:t>`); changed = true;
       const pics = [...x.matchAll(/<p:pic>[\s\S]*?<\/p:pic>/g)].filter(m => !/name="[^"]*roma[^"]*"/i.test(m[0]));
       if (pics.length) {
-        const pic = pics[0][0];
-        let logo = null;
-        const lu = logoUrl(t);
-        if (lu) { try { const r = await fetch(lu); if (r.ok) { const bytes = new Uint8Array(await r.arrayBuffer()); const bmp = await createImageBitmap(new Blob([bytes])); logo = { bytes, w: bmp.width, h: bmp.height, ext: /jpe?g/i.test(cfg.logoType || "") ? "jpeg" : "png" }; } } catch {} }
+        const pic = pics[0][0], logo = await teamLogo(t);
         if (logo) {
           const media = `ppt/media/logo_${t.id.replace(/[^\w]/g, "_")}.${logo.ext}`; zip.file(media, logo.bytes);
           rels = rels.replace("</Relationships>", `<Relationship Id="rIdLogo" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${media.split("/").pop()}"/></Relationships>`);
-          const box = pic.match(/<a:off x="(-?\d+)" y="(-?\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/);
-          let np = pic.replace(/r:embed="rId\d+"/, 'r:embed="rIdLogo"').replace(/name="[^"]*"/, `name="${xesc(short)} logo"`).replace(/descr="[^"]*"/, 'descr=""');
           // the crest is sized like the BC Roma crest (about 2.9M EMU) and centred where the template's logo sat
-          if (box) { const [bx, by, bw, bh] = box.slice(1).map(Number), side = Math.max(bw, 2900000), sc = Math.min(side / logo.w, Math.max(bh, side) / logo.h), cw = Math.round(logo.w * sc), chh = Math.round(logo.h * sc); np = np.replace(box[0], `<a:off x="${bx + Math.round((bw - cw) / 2)}" y="${by + Math.round((bh - chh) / 2)}"/><a:ext cx="${cw}" cy="${chh}"/>`); }
-          x = x.replace(pic, np);
+          const box = (pic.match(/<a:off x="(-?\d+)" y="(-?\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/) || []).slice(1).map(Number);
+          if (box.length) { const [bx, by, bw, bh] = box, side = Math.max(bw, bh, 2900000); box.splice(0, 4, bx + (bw - side) / 2, by + (bh - side) / 2, side, side); }
+          x = x.replace(pic, fitPic(pic, "rIdLogo", `${short} logo`, logo, box.length ? box : null));
         } else x = x.replace(pic, "");
       }
     }
@@ -861,7 +882,7 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
           const dataRows = [];
           for (let d = 0; d < depth; d++) {
             const src = d === 0 ? starterCells : benchCells, cells = [];
-            order.forEach((k, i) => { const p = cols[k][d]; cells.push(setCellText(src[2 * i], p && p.num ? "#" + p.num : "")); cells.push(fitCellText(src[2 * i + 1], p ? p.last.toUpperCase() : "", 5)); });
+            order.forEach((k, i) => { const p = cols[k][d]; cells.push(setCellText(src[2 * i], p && p.num ? "#" + p.num : "")); cells.push(fitCellText(src[2 * i + 1], p ? p.last.toUpperCase() : "", 9)); });
             dataRows.push(stripRowIds(makeRow(d === 0 ? rows[2][1] : rows[3][1], cells)));
           }
           const grid = tbl.slice(0, tbl.indexOf("<a:tr "));
@@ -881,7 +902,7 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
         const players = t.players.filter(p => p.stats && inDeck(p)).sort((a, b) => (Number(a.num) || 999) - (Number(b.num) || 999));
         const dataRows = players.map(p => {
           const s = p.stats, fgm = +(s.fg2m + s.fg3m).toFixed(1), fga = +(s.fg2a + s.fg3a).toFixed(1);
-          const vals = [p.num, p.last, `${s.min}’`, s.pts, `${fgm}-${fga}`, dec(fgm, fga), `${s.fg3m}-${s.fg3a}`, dec(s.fg3m, s.fg3a), `${s.ftm}-${s.fta}`, dec(s.ftm, s.fta), s.oreb, +(s.reb - s.oreb).toFixed(1), s.reb, s.ast, s.to, s.stl, s.blk];
+          const vals = [p.num, p.last, `${s.min}’`, s.pts, `${fgm}-${fga}`, pct(fgm, fga), `${s.fg3m}-${s.fg3a}`, pct(s.fg3m, s.fg3a), `${s.ftm}-${s.fta}`, pct(s.ftm, s.fta), s.oreb, +(s.reb - s.oreb).toFixed(1), s.reb, s.ast, s.to, s.stl, s.blk];
           return stripRowIds(makeRow(rows[1][1], src.map((c, i) => setCellText(c, i < vals.length ? String(vals[i]) : ""))));
         });
         const grid = tbl.slice(0, tbl.indexOf("<a:tr "));
