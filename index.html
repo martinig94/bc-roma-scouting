@@ -128,6 +128,9 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
 .ordered .item button { border: 0; background: transparent; padding: 0 4px; color: var(--muted); font-size: 12px; }
 .ordered .item button:hover { color: var(--ink); }
 .ordered .hint { color: var(--muted); }
+.roster-order { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 12px; }
+.roster-order .ordered { flex-direction: column; align-items: stretch; }
+.roster-order .item { justify-content: space-between; }
 .fields { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .fields select, .fields input[type="text"] { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
 .fields input[type="text"] { min-width: 160px; }
@@ -160,7 +163,9 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
     <div class="fields" id="team-deck" hidden>
       <span class="group"><span class="lbl">Deck name</span><input type="text" id="team-short" placeholder="e.g. BOSNA" aria-label="Team name on the slides"></span>
       <span class="group"><span class="lbl">Logo</span><span id="team-logo-name">none</span><label class="btn" id="logo-upload-lbl" hidden>Upload logo <input type="file" id="logo-upload" accept="image/png,image/jpeg" hidden></label><button class="btn" id="logo-remove" hidden>Remove</button></span>
+      <button class="btn" id="toggle-roster-order" aria-expanded="false">Roster slide order</button>
     </div>
+    <div class="panel roster-order" id="roster-order" hidden></div>
     <div class="tools">
       <button class="btn" id="toggle-tags" aria-expanded="false">Manage tags</button>
       <button class="btn" id="copy-json">Copy JSON</button>
@@ -275,6 +280,18 @@ const fmtDate = (d) => { const [y, m, dd] = d.split("-"); return `${dd}/${m}`; }
 const nextGame = (t) => t.games.find(g => g.date >= TODAY);
 const EMPTY = () => ({ role: "", hand: "", tags: [], bullets: [], todos: [], note: "", iso: "", closeout: "", markers: [], exclude: false, stat1: "reb", stat2: "ast" });
 const inDeck = (p) => !rec(p).exclude;
+// Roster slide columns: each deck player under their first role (no role: the shortest column), top to bottom
+// in the team's saved roster order ({PG: [ids], ...}), players not in that order after them by minutes.
+// A player with no role keeps the column it was saved in.
+function rosterColumns(t) {
+  const cols = Object.fromEntries(ROLES.map(k => [k, []])), spare = [];
+  const order = (teamCfg[t.id] || {}).rosterOrder || {}, flat = ROLES.flatMap(k => order[k] || []);
+  const rank = (p) => { const i = flat.indexOf(p.id); return i < 0 ? Infinity : i; };
+  const byOrder = (a, b) => rank(a) - rank(b) || ((b.stats && b.stats.min) || -1) - ((a.stats && a.stats.min) || -1);
+  for (const p of t.players.filter(inDeck).sort(byOrder)) { const ro = (rec(p).role || "").split("/")[0] || ROLES.find(k => (order[k] || []).includes(p.id)); (cols[ro] || spare).push(p); }
+  for (const p of spare) cols[ROLES.reduce((a, b) => cols[b].length < cols[a].length ? b : a)].push(p);
+  return cols;
+}
 const MARKERS = [["target", "🎯", "target"]];   // earlier key/hot markers stay in the data but are no longer offered or drawn
 const rec = (p) => { const s = saved[p.id] || {}; const r = { ...EMPTY(), role: p.role || "", ...s }; if (!s.markers) r.markers = s.marker ? [s.marker] : [s.key && "key", s.hot && "hot"].filter(Boolean); return r; };
 const teamById = (id) => ROSTERS.find(t => t.id === id);
@@ -323,12 +340,31 @@ function renderRoster() {
   if (lu) ln.append(el("img", { src: lu, alt: "", width: "28", height: "28", style: "vertical-align:middle;object-fit:contain;margin-right:6px" }), cfg.logoUrl || cfg.logoAssetId ? cfg.logoName || "uploaded" : "built-in");
   else ln.append("none (slide 1 gets no logo)");
   $("#logo-remove").hidden = !(cfg.logoUrl || cfg.logoAssetId);
+  renderRosterOrder(t);
   const q = query.trim().toLowerCase();
   for (const p of t.players) {
     if (q && !p.name.toLowerCase().includes(q) && !t.name.toLowerCase().includes(q)) continue;
     box.append(playerCard(p));
   }
 }
+
+// Roster slide (slide 4): one column per role, arrows move a player up or down within it; the top one gets the photo.
+function renderRosterOrder(t) {
+  const box = $("#roster-order"), cols = rosterColumns(t); box.replaceChildren();
+  const move = (k, i, d) => {
+    const col = cols[k], j = i + d; if (j < 0 || j >= col.length) return;
+    [col[i], col[j]] = [col[j], col[i]];
+    saveTeamCfg(t.id, { rosterOrder: Object.fromEntries(ROLES.map(r => [r, cols[r].map(p => p.id)])) }).then(() => renderRosterOrder(t));
+  };
+  for (const k of ROLES) {
+    const list = el("div", { class: "ordered" });
+    cols[k].forEach((p, i) => list.append(el("span", { class: "item" }, `${p.num ? "#" + p.num + " " : ""}${p.last.toUpperCase()}`,
+      el("span", {}, el("button", { title: "Move up", onclick: () => move(k, i, -1) }, "↑"), el("button", { title: "Move down", onclick: () => move(k, i, 1) }, "↓")))));
+    if (!cols[k].length) list.append(el("span", { class: "hint" }, "nobody"));
+    box.append(el("div", {}, el("span", { class: "lbl" }, k), list));
+  }
+}
+$("#toggle-roster-order").addEventListener("click", (e) => { const m = $("#roster-order"); m.hidden = !m.hidden; e.currentTarget.setAttribute("aria-expanded", String(!m.hidden)); });
 
 function orderedList(items, onChange, hint) {
   const wrap = el("div", { class: "ordered" });
@@ -802,11 +838,7 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
       if (ti >= 0) {
         const tbl = x.slice(ti, te), rows = rowsOf(tbl);
         if (rows.length >= 4) {
-          const cols = { PG: [], SG: [], SF: [], PF: [], C: [] }, spare = [];
-          const byMin = (a, b) => ((b.stats && b.stats.min) || -1) - ((a.stats && a.stats.min) || -1);
-          for (const p of t.players.filter(inDeck).sort(byMin)) { const ro = (rec(p).role || "").split("/")[0]; (cols[ro] ? cols[ro] : spare).push(p); }
-          for (const p of spare) { const k = Object.keys(cols).sort((a, b) => cols[a].length - cols[b].length)[0]; cols[k].push(p); }
-          const order = ["PG", "SG", "SF", "PF", "C"], depth = Math.max(3, ...order.map(k => cols[k].length));
+          const cols = rosterColumns(t), order = ROLES, depth = Math.max(3, ...order.map(k => cols[k].length));
           const header = rows[0][0];
           // starters' photos
           let photoRow = rows[1][0]; const pcells = cellsOf(rows[1][2]); let pr = 0;
