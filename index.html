@@ -301,9 +301,10 @@ const statVal = (p, k) => { const s = p.stats; if (!s || s[k] == null) return ""
 const heightText = (cm) => { if (!cm) return ""; const inch = Math.round(Number(cm) / 2.54); return `${cm} - ${Math.floor(inch / 12)}’${inch % 12}’’`; };
 const handText = (h) => ({ L: "Left", R: "Right", "?": "?" })[h] || "";
 const ISO_TEXT = { left: "PUSH LEFT", right: "PUSH RIGHT" };   // the only ISO calls; older free-text notes read as none
-// slide colours: left hand / push left, minutes and points in blue; right hand / push right and the two picked stats in red
-const BLUE = "4472C4", RED = "B70908";
-const sideColor = (v) => ({ L: BLUE, left: BLUE, R: RED, right: RED })[v] || BLUE;
+// slide colours of the reference deck: minutes and points in blue, the two picked stats in red; PUSH LEFT in the
+// tables' blue, PUSH RIGHT and TARGET in their own red (the hand keeps the template's blue)
+const BLUE = "4472C4", RED = "C80000", PUSH_BLUE = "003DA6", PUSH_RED = "C81B00";
+const isoColor = (side) => side === "right" ? PUSH_RED : PUSH_BLUE;
 
 function setStatus(text, saving) { const s = $("#status"); s.textContent = text; s.classList.toggle("saving", !!saving); }
 
@@ -519,7 +520,7 @@ function slideRows(t) {
   return t.players.map(p => {
     const r = rec(p);
     const row = { team: t.name, competition: t.comp, player_id: p.id, name: p.first, surname: p.last, number: p.num, height: heightText(p.height), role: r.role, hand: handText(r.hand),
-      minutes: p.stats ? `${p.stats.min}’` : "", points: p.stats ? `${p.stats.pts} PTS` : "", stat_1: statVal(p, r.stat1), stat_2: statVal(p, r.stat2),
+      minutes: p.stats ? `${p.stats.min}’` : "", points: p.stats ? `${p.stats.pts} PT` : "", stat_1: statVal(p, r.stat1), stat_2: statVal(p, r.stat2),
       bullet_1: r.bullets[0] || "", bullet_2: r.bullets[1] || "", bullet_3: r.bullets[2] || "", to_do1: r.todos[0] || "", to_do2: r.todos[1] || "", to_do3: r.todos[2] || "",
       iso: ISO_TEXT[r.iso] || "", close_out: r.closeout, target: r.markers.includes("target") ? 1 : 0, in_deck: r.exclude ? 0 : 1, photo: PHOTO_IDS.has(p.id) ? `photos/${p.id}.jpg` : "", tags: r.tags.join("; "), note: r.note };
     return row;
@@ -544,27 +545,28 @@ $("#export-csv").addEventListener("click", async () => {
 });
 
 // ---- PDF export (jsPDF, A4 portrait) ----
-async function photoData(id) {
-  if (!PHOTO_IDS.has(id)) return null;
+// an image file as {data, w, h}, or null when it cannot be fetched or decoded
+async function imageData(url) {
   try {
-    const res = await fetch("photos/" + id + ".jpg"); if (!res.ok) return null;
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    const bmp = await createImageBitmap(new Blob([bytes], { type: "image/jpeg" }));
-    return { data: bytes, w: bmp.width, h: bmp.height };
-  } catch { return null; }
+    const res = await fetch(url); if (!res.ok) return null;
+    const data = new Uint8Array(await res.arrayBuffer()), bmp = await createImageBitmap(new Blob([data]));
+    return { data, w: bmp.width, h: bmp.height };
+  } catch (e) { console.warn("image not loaded", url, e); return null; }
 }
-// PowerPoint head shot: a top-centred 4:5 box, 55% of the photo's width, starting 2% from the top.
+const photoData = (id) => PHOTO_IDS.has(id) ? imageData("photos/" + id + ".jpg") : null;
+// PowerPoint head shot: a top-centred box [share of the photo's width, height / width], starting 2% from the top.
+// Players get a 4:5 box on the face; referees keep their shoulders, as in the reference deck.
 // Square images (club logos standing in for a photo) are kept whole.
-const HEAD_W = 0.55, HEAD_ASPECT = 1.25, HEAD_TOP = 0.02;
-async function headshotData(id) {
-  const ph = await photoData(id);
+const HEAD_TOP = 0.02, PLAYER_HEAD = [0.55, 1.25], REF_HEAD = [0.83, 0.93];
+async function headCrop(ph, [widthShare, aspect]) {
   if (!ph || ph.h < ph.w * 1.1) return ph;
-  const cw = Math.round(ph.w * HEAD_W), ch = Math.min(Math.round(cw * HEAD_ASPECT), ph.h);
+  const cw = Math.round(ph.w * widthShare), ch = Math.min(Math.round(cw * aspect), ph.h);
   const canvas = new OffscreenCanvas(cw, ch);
-  canvas.getContext("2d").drawImage(await createImageBitmap(new Blob([ph.data], { type: "image/jpeg" })), Math.round((ph.w - cw) / 2), Math.round(ph.h * HEAD_TOP), cw, ch, 0, 0, cw, ch);
+  canvas.getContext("2d").drawImage(await createImageBitmap(new Blob([ph.data])), Math.round((ph.w - cw) / 2), Math.round(ph.h * HEAD_TOP), cw, ch, 0, 0, cw, ch);
   const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.92 });
   return { data: new Uint8Array(await blob.arrayBuffer()), w: cw, h: ch };
 }
+const headshotData = async (id) => headCrop(await photoData(id), PLAYER_HEAD);
 async function buildPdf(t) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -668,8 +670,10 @@ async function teamLogo(t) {
 // the reference deck's top-right crest box on the roster, stats and player slides (x, y, w, h in EMU)
 const LOGO_BOX = [11099800, 114300, 1003300, 1003300];
 // player slide: the "TARGET 🎯" label, centred at x 520 pt, top 470 pt (where the reference deck puts it)
-const targetRun = (text, face) => `<a:r><a:rPr lang="en-US" sz="4700" b="1" dirty="0"><a:solidFill><a:srgbClr val="${RED}"/></a:solidFill><a:latin typeface="${face}"/><a:ea typeface="${face}"/><a:cs typeface="${face}"/><a:sym typeface="${face}"/></a:rPr><a:t>${text}</a:t></a:r>`;
+const targetRun = (text, face) => `<a:r><a:rPr lang="en-US" sz="4700" b="1" dirty="0"><a:solidFill><a:srgbClr val="${PUSH_RED}"/></a:solidFill><a:latin typeface="${face}"/><a:ea typeface="${face}"/><a:cs typeface="${face}"/><a:sym typeface="${face}"/></a:rPr><a:t>${text}</a:t></a:r>`;
 const TARGET_SP = `<p:sp><p:nvSpPr><p:cNvPr id="901" name="Target"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="4572000" y="5969000"/><a:ext cx="4064000" cy="762000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="ctr"/>${targetRun("TARGET ", "Calibri")}${targetRun("🎯", "Segoe UI Emoji")}</a:p></p:txBody></p:sp>`;
+// a SURNAME as the script font wants it: Surname
+const titleCase = (s) => s.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, (c) => c.toUpperCase());
 // referees slide: where a name goes (EMU from the top) when the referee has no photo, mid-way down the photo row
 const REF_NAME_Y = 2921000;
 // a picture pointed at another image, renamed, and fitted (aspect kept, centred) in box, or in its own frame
@@ -770,9 +774,9 @@ async function buildPptx(t, onlyPlayers, progress) {
     // CLOSE OUT and ISO, as in the reference deck (Calibri bold 47 pt, red)
     for (const glyph of ["🔑", "🚀"]) { const sb = shapeByName(xml, glyph); if (sb) xml = xml.slice(0, sb[0]) + xml.slice(sb[1]); }
     if (r.markers.includes("target")) xml = xml.replace("</p:spTree>", TARGET_SP + "</p:spTree>");
-    for (const [k, hex] of [["hand", sideColor(r.hand)], ["minutes", BLUE], ["points", BLUE], ["stat_1", RED], ["stat_2", RED]]) xml = withRun(xml, k, (run) => styleRun(run, hex));
+    for (const [k, hex] of [["minutes", BLUE], ["points", BLUE], ["stat_1", RED], ["stat_2", RED]]) xml = withRun(xml, k, (run) => styleRun(run, hex));
     // ISO: "PUSH" regular, the side in bold, both in the side's colour
-    xml = withRun(xml, "iso", (run) => { const side = vars.iso.split(" ")[1]; return side ? styleRun(run.replace("{{iso}}", "PUSH "), sideColor(r.iso), false) + styleRun(run.replace("{{iso}}", side), sideColor(r.iso), true) : run; });
+    xml = withRun(xml, "iso", (run) => { const side = vars.iso.split(" ")[1]; return side ? styleRun(run.replace("{{iso}}", "PUSH "), isoColor(r.iso), false) + styleRun(run.replace("{{iso}}", side), isoColor(r.iso), true) : run; });
     xml = xml.replace(/\{\{(\w+)\}\}/g, (m, k) => k in vars ? xesc(vars[k]) : "");
     const path = `ppt/slides/slide${nextN}.xml`;
     zip.file(path, xml); zip.file(relsOf(path), srels);
@@ -852,8 +856,9 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
         } else x = x.replace(pic, "");
       }
     }
-    // referees: the designated crew of the game (crew chief = {{ref1_…}}), each photo from referees/<key>.jpg; a referee
-    // without one has the name raised into the photo's place. Before the designation the slide reads TBA, without numbers.
+    // referees: the designated crew of the game (crew chief = {{ref1_…}}), each photo a head shot of
+    // referees/<key>.jpg, the surname in script over the first name; a referee without a photo has the name raised into
+    // the photo's place. Before the designation the slide reads TBA, without numbers.
     if (x.includes("{{ref1_last}}")) {
       const crew = (g && g.refs) || [];
       const raise = (sp, y) => { const b = shapeByName(x, sp); if (b) x = x.slice(0, b[0]) + x.slice(b[0], b[1]).replace(/(<a:off x="-?\d+" y=")-?\d+"/, `$1${y}"`) + x.slice(b[1]); };
@@ -864,15 +869,14 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
       }
       for (const pic of [...x.matchAll(/<p:pic>[\s\S]*?<\/p:pic>/g)].map(m => m[0]).filter(p => /name="Referee \d photo"/.test(p))) {
         const r = crew[Number(pic.match(/name="Referee (\d) photo"/)[1]) - 1];
-        let img = null;
-        if (r && REF_PHOTOS.has(r.key)) { try { const res = await fetch(`referees/${r.key}.jpg`); if (res.ok) { const bytes = new Uint8Array(await res.arrayBuffer()), bmp = await createImageBitmap(new Blob([bytes])); img = { bytes, w: bmp.width, h: bmp.height }; } } catch (e) { console.warn("referee photo not loaded", e); } }
+        const img = r && REF_PHOTOS.has(r.key) ? await headCrop(await imageData(`referees/${r.key}.jpg`), REF_HEAD) : null;
         if (img) {
-          const media = `ppt/media/referee_${r.key}.jpeg`, rid = "rIdRef_" + r.key; zip.file(media, img.bytes);
+          const media = `ppt/media/referee_${r.key}.jpeg`, rid = "rIdRef_" + r.key; zip.file(media, img.data);
           rels = rels.replace("</Relationships>", `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${media.split("/").pop()}"/></Relationships>`);
           x = x.replace(pic, fitPic(pic, rid, `${r.first} ${r.last}`, img));
         } else x = x.replace(pic, "");
       }
-      x = x.replace(/\{\{ref(\d)_(first|last)\}\}/g, (m, n, part) => { const r = crew[n - 1]; return xesc(r ? r[part] : !crew.length && n === "1" && part === "last" ? "TBA" : ""); });
+      x = x.replace(/\{\{ref(\d)_(first|last)\}\}/g, (m, n, part) => { const r = crew[n - 1]; return xesc(r ? (part === "last" ? titleCase(r.last) : r.first) : !crew.length && n === "1" && part === "first" ? "TBA" : ""); });
       changed = true;
     }
     // roster by position
@@ -924,7 +928,7 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
         const players = t.players.filter(p => p.stats && inDeck(p)).sort((a, b) => (Number(a.num) || 999) - (Number(b.num) || 999));
         const dataRows = players.map(p => {
           const s = p.stats, fgm = +(s.fg2m + s.fg3m).toFixed(1), fga = +(s.fg2a + s.fg3a).toFixed(1);
-          const vals = [p.num, p.last, `${s.min}’`, s.pts, `${fgm}-${fga}`, pct(fgm, fga), `${s.fg3m}-${s.fg3a}`, pct(s.fg3m, s.fg3a), `${s.ftm}-${s.fta}`, pct(s.ftm, s.fta), s.oreb, +(s.reb - s.oreb).toFixed(1), s.reb, s.ast, s.to, s.stl, s.blk];
+          const vals = [p.num, p.last, s.min, s.pts, `${fgm}-${fga}`, pct(fgm, fga), `${s.fg3m}-${s.fg3a}`, pct(s.fg3m, s.fg3a), `${s.ftm}-${s.fta}`, pct(s.ftm, s.fta), s.oreb, +(s.reb - s.oreb).toFixed(1), s.reb, s.ast, s.to, s.stl, s.blk];
           return stripRowIds(makeRow(rows[1][1], src.map((c, i) => setCellText(c, i < vals.length ? String(vals[i]) : ""))));
         });
         const grid = tbl.slice(0, tbl.indexOf("<a:tr "));
