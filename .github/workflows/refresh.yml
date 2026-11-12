@@ -26,8 +26,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pillow
+      - run: pip install pillow "rembg[cpu]"
+      # the background-removal model for referee photos (~180 MB), downloaded only when a new referee appears
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.u2net
+          key: rembg-isnet-general-use
       - run: python build.py --analysis analysis
+        env:
+          U2NET_HOME: /home/runner/.u2net
       - name: commit if changed
         run: |
           git config user.name "github-actions[bot]"

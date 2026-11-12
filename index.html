@@ -667,6 +667,9 @@ async function teamLogo(t) {
 }
 // the reference deck's top-right crest box on the roster, stats and player slides (x, y, w, h in EMU)
 const LOGO_BOX = [11099800, 114300, 1003300, 1003300];
+// player slide: the "TARGET 🎯" label, centred at x 520 pt, top 470 pt (where the reference deck puts it)
+const targetRun = (text, face) => `<a:r><a:rPr lang="en-US" sz="4700" b="1" dirty="0"><a:solidFill><a:srgbClr val="${RED}"/></a:solidFill><a:latin typeface="${face}"/><a:ea typeface="${face}"/><a:cs typeface="${face}"/><a:sym typeface="${face}"/></a:rPr><a:t>${text}</a:t></a:r>`;
+const TARGET_SP = `<p:sp><p:nvSpPr><p:cNvPr id="901" name="Target"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="4572000" y="5969000"/><a:ext cx="4064000" cy="762000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="ctr"/>${targetRun("TARGET ", "Calibri")}${targetRun("🎯", "Segoe UI Emoji")}</a:p></p:txBody></p:sp>`;
 // referees slide: where a name goes (EMU from the top) when the referee has no photo, mid-way down the photo row
 const REF_NAME_Y = 2921000;
 // a picture pointed at another image, renamed, and fitted (aspect kept, centred) in box, or in its own frame
@@ -763,16 +766,10 @@ async function buildPptx(t, onlyPlayers, progress) {
       if (k >= 0) tbl = tbl.slice(0, k) + fill + tbl.slice(k + '<a:solidFill><a:srgbClr val="C31A00"/></a:solidFill>'.length);
       xml = xml.slice(0, tb[0]) + tbl + xml.slice(tb[1]);
     }
-    // 🎯 target marker: the template parks 🔑 and 🚀 off-slide; both are dropped, and when the player is a target the 🔑 shape
-    // comes back with the glyph swapped, centred on the slide between CLOSE OUT and ISO.
-    const MY = 5300000;
-    const kb = shapeByName(xml, "🔑"), keyShape = kb ? xml.slice(kb[0], kb[1]) : "";
+    // target marker: the template parks 🔑 and 🚀 off-slide and both are dropped; a target gets "TARGET 🎯" between
+    // CLOSE OUT and ISO, as in the reference deck (Calibri bold 47 pt, red)
     for (const glyph of ["🔑", "🚀"]) { const sb = shapeByName(xml, glyph); if (sb) xml = xml.slice(0, sb[0]) + xml.slice(sb[1]); }
-    if (r.markers.includes("target") && keyShape) {
-      const cx = Number((keyShape.match(/<a:ext cx="(\d+)"/) || [, 1448832])[1]);
-      const sp = keyShape.replace(/🔑/g, "🎯").replace(/<p:cNvPr id="\d+"/, '<p:cNvPr id="901"').replace(/<a:off x="-?\d+" y="-?\d+"\/>/, `<a:off x="${Math.round((12192000 - cx) / 2)}" y="${MY}"/>`);
-      xml = xml.replace("</p:spTree>", sp + "</p:spTree>");
-    }
+    if (r.markers.includes("target")) xml = xml.replace("</p:spTree>", TARGET_SP + "</p:spTree>");
     for (const [k, hex] of [["hand", sideColor(r.hand)], ["minutes", BLUE], ["points", BLUE], ["stat_1", RED], ["stat_2", RED]]) xml = withRun(xml, k, (run) => styleRun(run, hex));
     // ISO: "PUSH" regular, the side in bold, both in the side's colour
     xml = withRun(xml, "iso", (run) => { const side = vars.iso.split(" ")[1]; return side ? styleRun(run.replace("{{iso}}", "PUSH "), sideColor(r.iso), false) + styleRun(run.replace("{{iso}}", side), sideColor(r.iso), true) : run; });

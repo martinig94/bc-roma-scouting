@@ -12,7 +12,8 @@ Reads (all from the analysis repo):
 Fetches (network):
     lba-media S3 (picture_key), EuroCup photo_url    original headshots, once per player (kept at <= 640 px)
     legabasket.it match header, api-live.euroleague.net games   referee crews of games in the next REF_DAYS days
-    aiaponline.it/associati/<first-last>             those referees' profile photos, once per referee
+    aiaponline.it/associati/<first-last>             those referees' profile photos, once per referee, with
+                                                     the logo-wall backdrop removed (needs rembg[cpu])
 Writes:
     data/rosters.json   teams, players, stats, games (with "refs" once a crew is designated), plus the lists of
                         available photos, logos and referee photos
@@ -28,6 +29,7 @@ import argparse
 import collections
 import csv
 import datetime as dt
+import functools
 import io
 import json
 import re
@@ -45,6 +47,7 @@ HTTP_TIMEOUT_S = 30
 REF_DAYS = 10   # crews are looked up only for games this close: they are designated a few days before
 AIAP = "https://www.aiaponline.it"   # the Italian referees' association: /associati/<first-last> has a profile photo
 REF_PHOTO_MAX = (480, 600)
+REF_MATTING_MODEL = "isnet-general-use"   # rembg model that cuts the referee out of the logo wall cleanly
 ROLE_LBA = {"Playmaker": "PG", "Play/Guardia": "PG/SG", "Guardia": "SG", "Guardia/Ala": "SG/SF", "Ala": "SF", "Ala/Centro": "PF/C", "Centro": "C", "-": ""}
 ROLE_EC = {"Guard": "SG", "Forward": "SF", "Center": "C"}
 MY_TEAM, MY_CODE = "BC Roma", "BCR"
@@ -206,11 +209,41 @@ def referee_photo(r: dict, dest: Path) -> bool:
         return False
     from PIL import Image
     with Image.open(data) as raw:
-        im = raw.convert("RGB")
+        im = cut_out(raw.convert("RGB"))
     im.thumbnail(REF_PHOTO_MAX)
     dest.parent.mkdir(exist_ok=True)
     im.save(dest, "JPEG", quality=88, optimize=True)
     return True
+
+
+@functools.cache
+def _matting_session():
+    """The background-removal model, loaded on first use (rembg downloads it once, about 180 MB)."""
+    from rembg import new_session
+    return new_session(REF_MATTING_MODEL)
+
+
+def cut_out(im):
+    """Return the RGB image with its backdrop (the AIAP logo wall) replaced by white.
+
+    Without rembg installed the image comes back unchanged, with a note.
+
+    Args:
+        im: An RGB PIL image of one person.
+
+    Returns:
+        An RGB PIL image of the same size.
+    """
+    from PIL import Image
+    try:
+        from rembg import remove
+    except ImportError:
+        print("referee photo: rembg not installed (pip install 'rembg[cpu]'), backdrop kept")
+        return im
+    cut = remove(im, session=_matting_session())
+    flat = Image.new("RGB", cut.size, "white")
+    flat.paste(cut, mask=cut.getchannel("A"))
+    return flat
 
 
 def headshot(url: str, fallback: Path, dest: Path) -> bool:
