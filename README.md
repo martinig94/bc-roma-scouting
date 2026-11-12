@@ -30,7 +30,9 @@ git add data/rosters.json photos && git commit -m "rosters as of $(date +%F)"
 ```
 
 `build.py` rewrites `data/rosters.json` (teams ordered by BC Roma's next game, players, season averages,
-game numbers) and the `photos/` thumbnails. Needs Pillow.
+game numbers) and the `photos/` headshots: each player's original picture (legabasket.it media, EuroCup
+API) is downloaded once and kept at 640 px wide, so the slides' head-shot crop stays sharp; the analysis
+repo's 240 px thumbnail is the fallback. Needs Pillow.
 
 It also looks up the referee crew of BC Roma's games in the next 10 days: the LBA match header on
 legabasket.it and the EuroCup game on api-live.euroleague.net, crew chief first. LBA designates during the

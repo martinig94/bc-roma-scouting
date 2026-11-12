@@ -7,9 +7,11 @@ Reads (all from the analysis repo):
     data/team_rosters.csv, data/eurocup/people.csv       the rosters (BC Roma itself is left out)
     data/box_scores.csv, data/eurocup_2026_raw.txt       season averages per player
     data/games.csv, data/eurocup/results.csv, weekly/schedule.csv   BC Roma's games -> "GAME #n" and the next game per team
-    data/photos/<player_id>.jpg, data/eurocup/photos/<photo_name>.jpg   headshots (resized to <= 240 px here)
-Fetches (network, for BC Roma's games in the next REF_DAYS days):
-    legabasket.it match header, api-live.euroleague.net games   the designated referee crews
+    data/photos/<player_id>.jpg, data/eurocup/photos/<photo_name>.jpg   240 px headshots, the fallback when the
+                                                                         league's original cannot be fetched
+Fetches (network):
+    lba-media S3 (picture_key), EuroCup photo_url    original headshots, once per player (kept at <= 640 px)
+    legabasket.it match header, api-live.euroleague.net games   referee crews of games in the next REF_DAYS days
 Writes:
     data/rosters.json   teams, players, stats, games (with "refs" once a crew is designated), plus the lists of
                         available photos, logos and referee photos
@@ -43,7 +45,9 @@ REF_DAYS = 10   # crews are looked up only for games this close: they are design
 ROLE_LBA = {"Playmaker": "PG", "Play/Guardia": "PG/SG", "Guardia": "SG", "Guardia/Ala": "SG/SF", "Ala": "SF", "Ala/Centro": "PF/C", "Centro": "C", "-": ""}
 ROLE_EC = {"Guard": "SG", "Forward": "SF", "Center": "C"}
 MY_TEAM, MY_CODE = "BC Roma", "BCR"
-PHOTO_MAX = (240, 480)
+PHOTO_MAX = (640, 1280)   # headshots are cropped further for the slides, so they are kept well above screen size
+LBA_PHOTO = "https://lba-media.s3.eu-south-1.amazonaws.com/{}"
+THUMB_W = 240   # width of the analysis repo's thumbnails: a photo this narrow still waits for its original
 
 
 def player_key(name: str) -> str:
@@ -172,18 +176,45 @@ def eurocup_crews(season: str, club: str) -> dict[str, list[dict]]:
     return out
 
 
-def thumbnail(src: Path, dest: Path) -> bool:
+def headshot(url: str, fallback: Path, dest: Path) -> bool:
+    """Write dest as a JPEG of at most PHOTO_MAX, from the league's original picture.
+
+    A dest wider than a thumbnail is kept (so each original is downloaded once); when the original cannot be
+    fetched, the analysis repo's small thumbnail is used instead. Transparent backgrounds become white.
+
+    Args:
+        url: The original picture's address ("" when the league has none).
+        fallback: The analysis repo's thumbnail of the same player.
+        dest: Output path.
+
+    Returns:
+        True when dest exists afterwards.
+    """
     try:
-        from PIL import Image
+        from PIL import Image, UnidentifiedImageError
     except ImportError:
         sys.exit("Pillow is needed for the photos: pip install pillow")
+    if dest.exists():
+        with Image.open(dest) as cur:
+            if cur.width > THUMB_W:
+                return True
+    src: io.BytesIO | Path = fallback
+    if url:
+        try:
+            with urlopen(Request(url, headers=HTTP_HEADERS), timeout=HTTP_TIMEOUT_S) as resp:
+                src = io.BytesIO(resp.read())
+        except (HTTPError, URLError, TimeoutError) as exc:
+            print(f"photo {url} failed ({exc}), using the thumbnail")
     try:
-        im = Image.open(src).convert("RGB")
-    except Exception:
-        return False
-    im.thumbnail(PHOTO_MAX)
+        with Image.open(src) as raw:
+            im = raw.convert("RGBA")
+    except (FileNotFoundError, UnidentifiedImageError):
+        return dest.exists()
+    flat = Image.new("RGB", im.size, "white")
+    flat.paste(im, mask=im.getchannel("A"))
+    flat.thumbnail(PHOTO_MAX)
     buf = io.BytesIO()
-    im.save(buf, "JPEG", quality=85, optimize=True)
+    flat.save(buf, "JPEG", quality=85, optimize=True)
     dest.write_bytes(buf.getvalue())
     return True
 
@@ -224,7 +255,8 @@ def main() -> None:
         t = team("lba-" + r["team_id"], r["team"], "LBA")
         t["players"].append({"id": pid, "first": r["name"], "last": r["surname"], "name": f"{r['name']} {r['surname']}".strip(), "num": r["number"], "height": r["height_cm"],
                              "born": r["birth_date"][:4], "country": r["country"], "role": ROLE_LBA.get(r["role"], ""), "stats": avg(lstats.get(r["player_id"], []))})
-        if thumbnail(A / "data" / "photos" / f"{r['player_id']}.jpg", ROOT / "photos" / f"{pid}.jpg"):
+        url = LBA_PHOTO.format(r["picture_key"]) if r.get("picture_key") else ""
+        if headshot(url, A / "data" / "photos" / f"{r['player_id']}.jpg", ROOT / "photos" / f"{pid}.jpg"):
             photos.append(pid)
     for r in ec:
         if r["club"] == MY_CODE:
@@ -240,7 +272,7 @@ def main() -> None:
         parts = r["player"].split(" ")
         t["players"].append({"id": pid, "first": parts[0], "last": " ".join(parts[1:]), "name": r["player"], "num": r["number"], "height": r["height_cm"].replace(".0", ""),
                              "born": "", "country": "", "role": ROLE_EC.get(r["position"], ""), "stats": avg(rows)})
-        if thumbnail(A / "data" / "eurocup" / "photos" / f"{photo_name(r['player'])}.jpg", ROOT / "photos" / f"{pid}.jpg"):
+        if headshot(r.get("photo_url") or "", A / "data" / "eurocup" / "photos" / f"{photo_name(r['player'])}.jpg", ROOT / "photos" / f"{pid}.jpg"):
             photos.append(pid)
 
     # BC Roma's games: per team the dates, and "GAME #n" counted along BC Roma's schedule in that competition
