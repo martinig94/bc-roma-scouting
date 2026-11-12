@@ -32,6 +32,14 @@ git add data/rosters.json photos && git commit -m "rosters as of $(date +%F)"
 `build.py` rewrites `data/rosters.json` (teams ordered by BC Roma's next game, players, season averages,
 game numbers) and the `photos/` thumbnails. Needs Pillow.
 
+It also looks up the referee crew of BC Roma's games in the next 10 days: the LBA match header on
+legabasket.it and the EuroCup game on api-live.euroleague.net, crew chief first. LBA designates during the
+week (the crew for a Saturday game is usually out by Thursday); EuroCup can be as late as game day. The
+GitHub workflow runs at 07:20 and 15:00 UTC, so the page and the referees slide pick a crew up the same day.
+Neither API serves usable referee photos: put them in `referees/<surname>_<first name>.jpg` (lowercase,
+ASCII, `_` for spaces and punctuation, e.g. `capotorto_gianluca.jpg`); a referee without one gets a
+name-only column. Commit `referees/` with the next refresh.
+
 ## Files
 
 | path | what |
@@ -41,9 +49,10 @@ game numbers) and the `photos/` thumbnails. Needs Pillow.
 | `build.py` | data refresh from the analysis repo |
 | `data/rosters.json` | generated: rosters, stats, games, photo and logo lists |
 | `data/scouting.json` | your notes (players, tag lists, team settings, template choice) |
-| `template.pptx` | the deck template: one slide carrying `{{name}} {{surname}} {{number}} {{height}} {{role}} {{hand}} {{minutes}} {{points}} {{stat_1}} {{stat_2}} {{bullet_1..3}} {{to_do1..3}} {{iso}} {{photo}}`, a CLOSE OUT table, parked 🔑/🚀 shapes; a cover with `<COMP> - GAME #n`; a roster table headed PG/SG/SF/PF/C; a stats table headed `FGM-A` |
+| `template.pptx` | the deck template: one slide carrying `{{name}} {{surname}} {{number}} {{height}} {{role}} {{hand}} {{minutes}} {{points}} {{stat_1}} {{stat_2}} {{bullet_1..3}} {{to_do1..3}} {{iso}} {{photo}}`, a CLOSE OUT table, parked 🔑/🚀 shapes; a cover with `<COMP> - GAME #n`; a roster table headed PG/SG/SF/PF/C; a stats table headed `FGM-A`; a referees slide with `{{ref1_first}} {{ref1_last}}` (crew chief) to `{{ref3_…}}` and pictures named `Referee 1 photo` to `Referee 3 photo` |
 | `logos/<team id>.png` | opponent crests (legabasket.it media CDN, EuroCup API); `lba-<team_id>` / `ec-<club code>` |
 | `photos/<player id>.jpg` | generated headshots |
+| `referees/<surname>_<first name>.jpg` | referee photos, added by hand |
 
 Team ids are `lba-<team_id>` (from `data/teams.csv` of the analysis repo) and `ec-<EuroLeague club code>`.
 

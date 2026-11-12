@@ -8,12 +8,16 @@ Reads (all from the analysis repo):
     data/box_scores.csv, data/eurocup_2026_raw.txt       season averages per player
     data/games.csv, data/eurocup/results.csv, weekly/schedule.csv   BC Roma's games -> "GAME #n" and the next game per team
     data/photos/<player_id>.jpg, data/eurocup/photos/<photo_name>.jpg   headshots (resized to <= 240 px here)
+Fetches (network, for BC Roma's games in the next REF_DAYS days):
+    legabasket.it match header, api-live.euroleague.net games   the designated referee crews
 Writes:
-    data/rosters.json   teams, players, stats, games, plus the lists of available photos and logos
+    data/rosters.json   teams, players, stats, games (with "refs" once a crew is designated), plus the lists of
+                        available photos, logos and referee photos
     photos/<player id>.jpg
 
 Run it whenever rosters or stats changed in the analysis repo (after its morning collection), then commit.
-Logos are not touched: logos/<team id>.png is maintained by hand (see README).
+Logos and referee photos are not touched: logos/<team id>.png and referees/<ref key>.jpg are maintained by hand
+(see README).
 """
 from __future__ import annotations
 
@@ -27,8 +31,15 @@ import re
 import sys
 import unicodedata
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
+LBA_MATCH = "https://www.legabasket.it/api/championships/get-championships-matches-by-id?id={}"
+EC_GAMES = "https://api-live.euroleague.net/v2/competitions/U/seasons/U{season}/games?teamCode={club}&limit=100"
+HTTP_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; bc-roma-scouting)", "Accept": "application/json"}
+HTTP_TIMEOUT_S = 30
+REF_DAYS = 10   # crews are looked up only for games this close: they are designated a few days before
 ROLE_LBA = {"Playmaker": "PG", "Play/Guardia": "PG/SG", "Guardia": "SG", "Guardia/Ala": "SG/SF", "Ala": "SF", "Ala/Centro": "PF/C", "Centro": "C", "-": ""}
 ROLE_EC = {"Guard": "SG", "Forward": "SF", "Center": "C"}
 MY_TEAM, MY_CODE = "BC Roma", "BCR"
@@ -92,6 +103,75 @@ def eurocup_stats(raw: Path) -> dict[tuple[str, str], list[dict]]:
     return out
 
 
+def get_json(url: str) -> dict | None:
+    """Return the parsed JSON at url, or None (logged) when the request fails.
+
+    Args:
+        url: The address to fetch.
+
+    Returns:
+        The decoded JSON object, or None on a network or decoding error.
+    """
+    try:
+        with urlopen(Request(url, headers=HTTP_HEADERS), timeout=HTTP_TIMEOUT_S) as resp:
+            return json.loads(resp.read())
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+        print(f"referees: {url} failed ({exc})")
+        return None
+
+
+def ref(first: str, last: str) -> dict:
+    """A crew member as stored in rosters.json: first name, SURNAME and the referees/<key>.jpg photo key.
+
+    Args:
+        first: Given name, any case.
+        last: Surname, any case.
+
+    Returns:
+        {"first": "Andrea", "last": "VALZANI", "key": "valzani_andrea"}.
+    """
+    first, last = first.strip().title(), last.strip().upper()
+    key = unicodedata.normalize("NFKD", f"{last} {first}").encode("ascii", "ignore").decode().lower()
+    return {"first": first, "last": last, "key": re.sub(r"\W+", "_", key).strip("_")}
+
+
+def lba_crew(game_id: str) -> list[dict]:
+    """The designated LBA crew of a game, crew chief first; empty until designated.
+
+    Args:
+        game_id: legabasket.it game id.
+
+    Returns:
+        Up to three ref() entries.
+    """
+    data = get_json(LBA_MATCH.format(game_id)) or {}
+    return [ref(r.get("name", ""), r.get("surname", "")) for r in data.get("referees") or [] if r.get("surname")]
+
+
+def eurocup_crews(season: str, club: str) -> dict[str, list[dict]]:
+    """Game date -> designated EuroCup crew (crew chief first) for every game of a club with one.
+
+    Args:
+        season: Season year, e.g. "2026".
+        club: EuroLeague club code, e.g. "BCR".
+
+    Returns:
+        A mapping from ISO date to up to three ref() entries.
+    """
+    data = get_json(EC_GAMES.format(season=season, club=club)) or {}
+    out = {}
+    for g in data.get("data", []):
+        crew = []
+        for i in (1, 2, 3):
+            name = (g.get(f"referee{i}") or {}).get("name", "")
+            if name:
+                last, _, first = name.partition(",")
+                crew.append(ref(first, last))
+        if crew:
+            out[g["date"][:10]] = crew
+    return out
+
+
 def thumbnail(src: Path, dest: Path) -> bool:
     try:
         from PIL import Image
@@ -116,6 +196,7 @@ def main() -> None:
     if not (A / "data" / "team_rosters.csv").exists():
         sys.exit(f"analysis repo not found at {A} (pass --analysis)")
     today = dt.date.today().isoformat()
+    soon = (dt.date.today() + dt.timedelta(days=REF_DAYS)).isoformat()
 
     lba = read_csv(A / "data" / "team_rosters.csv")
     ec = read_csv(A / "data" / "eurocup" / "people.csv")
@@ -173,24 +254,34 @@ def main() -> None:
         k = "lba-" + name2id.get(opp, "")
         if k in teams:
             d = g["match_datetime"][:10]
-            teams[k]["games"].append({"date": d, "home": g["home_team"] == MY_TEAM, "played": d < today, "round": "R" + g["round"], "n": my_lba.index(d) + 1})
+            teams[k]["games"].append({"date": d, "home": g["home_team"] == MY_TEAM, "played": d < today, "round": "R" + g["round"], "n": my_lba.index(d) + 1,
+                                      "refs": lba_crew(g["game_id"]) if today <= d <= soon else []})
+    # a EuroCup season is named after the year it starts in (U2026 = 2026-27, July on)
+    season = dt.date.today().year - (dt.date.today().month < 7)
+    ec_soon = any(s["competition"] == "EuroCup" and today <= s["date"] <= soon for s in sched)
+    ec_crews = eurocup_crews(str(season), MY_CODE) if ec_soon else {}
     for s in sched:
         if s["competition"] != "EuroCup":
             continue
         code = [c for c, n in code2name.items() if n == s["opponent"]]
         k = "ec-" + code[0] if code else ""
         if k in teams:
-            teams[k]["games"].append({"date": s["date"], "home": s["home"] == "1", "played": s["date"] < today, "round": "", "n": my_ec.index(s["date"]) + 1 if s["date"] in my_ec else None})
+            teams[k]["games"].append({"date": s["date"], "home": s["home"] == "1", "played": s["date"] < today, "round": "", "n": my_ec.index(s["date"]) + 1 if s["date"] in my_ec else None,
+                                      "refs": ec_crews.get(s["date"], []) if today <= s["date"] <= soon else []})
     for t in teams.values():
         t["games"].sort(key=lambda g: g["date"])
     out = sorted(teams.values(), key=lambda t: (min([g["date"] for g in t["games"] if not g["played"]] or ["9999"]), t["name"]))
 
-    logos = sorted(p.stem for p in (ROOT / "logos").glob("*.png")) if (ROOT / "logos").exists() else []
+    logos = sorted(p.stem for p in (ROOT / "logos").glob("*.png"))
+    ref_photos = sorted(p.stem for p in (ROOT / "referees").glob("*.jpg"))
     (ROOT / "data").mkdir(exist_ok=True)
-    (ROOT / "data" / "rosters.json").write_text(json.dumps({"asof": today, "teams": out, "photos": sorted(photos), "logos": logos}, ensure_ascii=False), encoding="utf-8")
+    (ROOT / "data" / "rosters.json").write_text(json.dumps({"asof": today, "teams": out, "photos": sorted(photos), "logos": logos, "refphotos": ref_photos},
+                                                           ensure_ascii=False), encoding="utf-8")
     n_players = sum(len(t["players"]) for t in out)
     n_stats = sum(1 for t in out for p in t["players"] if p["stats"])
+    crews = [f"{t['name']} {g['date']}: {', '.join(r['last'] for r in g['refs'])}" for t in out for g in t["games"] if g["refs"]]
     print(f"{len(out)} teams, {n_players} players ({n_stats} with stats), {len(photos)} photos, {len(logos)} logos -> data/rosters.json")
+    print("crews: " + ("; ".join(crews) if crews else f"none designated yet for the next {REF_DAYS} days"))
 
 
 if __name__ == "__main__":

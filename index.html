@@ -198,7 +198,7 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 // Rosters, stats, photo and logo lists come from data/rosters.json (written by build.py); loaded in boot().
-let DATA = null, ROSTERS = [], ASOF = "", PHOTO_IDS = new Set(), LOGO_IDS = new Set();
+let DATA = null, ROSTERS = [], ASOF = "", PHOTO_IDS = new Set(), LOGO_IDS = new Set(), REF_PHOTOS = new Set();
 const DEFAULT_TAGS = ["shooter","catch-and-shoot","off the dribble","slasher","playmaker","ball handler","post-up","pick-and-pop","roller","lob threat","rim protector","switchable","offensive rebounder","cutter","transition runner","foul-prone","turnover-prone","drives left","drives right","streaky"];
 const DEFAULT_TODOS = ["go under on P&R","go over on P&R","switch","ICE the side P&R","close out hard","close out short, stay down","no middle","force left","force right","box out early","front the post","help early on drives","no help off him","pressure the ball"];
 const ROLES = ["PG","SG","SF","PF","C"];
@@ -334,7 +334,7 @@ function renderRoster() {
   $("#team-name").textContent = t.name;
   const g = nextGame(t);
   const gl = $("#team-game"); gl.replaceChildren();
-  if (g) gl.append("Next: ", el("b", {}, `${fmtDate(g.date)} ${g.home ? "at home" : "away"}`), ` · ${t.comp}${g.round ? " " + g.round : ""}${g.n ? ` · game #${g.n}` : ""}`);
+  if (g) gl.append("Next: ", el("b", {}, `${fmtDate(g.date)} ${g.home ? "at home" : "away"}`), ` · ${t.comp}${g.round ? " " + g.round : ""}${g.n ? ` · game #${g.n}` : ""} · referees: ${g.refs && g.refs.length ? g.refs.map(r => r.last).join(", ") : "not designated yet"}`);
   else gl.append(`${t.comp} · no game left this season`);
   $("#team-deck").hidden = false;
   const sh = $("#team-short"); if (document.activeElement !== sh) sh.value = shortName(t);
@@ -667,11 +667,13 @@ async function teamLogo(t) {
 }
 // the reference deck's top-right crest box on the roster, stats and player slides (x, y, w, h in EMU)
 const LOGO_BOX = [11099800, 114300, 1003300, 1003300];
+// referees slide: where a name goes (EMU from the top) when the referee has no photo, mid-way down the photo row
+const REF_NAME_Y = 2921000;
 // a picture pointed at another image, renamed, and fitted (aspect kept, centred) in box, or in its own frame
 function fitPic(pic, rid, name, img, box) {
   const own = pic.match(/<a:off x="(-?\d+)" y="(-?\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/);
   const [bx, by, bw, bh] = box || own.slice(1).map(Number), sc = Math.min(bw / img.w, bh / img.h), cw = Math.round(img.w * sc), ch = Math.round(img.h * sc);
-  return pic.replace(/r:embed="rId\w+"/, `r:embed="${rid}"`).replace(/name="[^"]*"/, `name="${xesc(name)}"`).replace(/descr="[^"]*"/, 'descr=""')
+  return pic.replace(/r:embed="rId\w+"/, `r:embed="${rid}"`).replace(/name="[^"]*"/, `name="${xesc(name)}"`).replace(/descr="[^"]*"/, 'descr=""').replace(/<a:srcRect[^>]*\/>/, "")
     .replace(own[0], `<a:off x="${Math.round(bx + (bw - cw) / 2)}" y="${Math.round(by + (bh - ch) / 2)}"/><a:ext cx="${cw}" cy="${ch}"/>`);
 }
 // the text run that carries {{key}}, rewritten by fn
@@ -853,6 +855,29 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
         } else x = x.replace(pic, "");
       }
     }
+    // referees: the designated crew of the game (crew chief = {{ref1_…}}), each photo from referees/<key>.jpg; a referee
+    // without one has the name raised into the photo's place. Before the designation the slide reads TBA, without numbers.
+    if (x.includes("{{ref1_last}}")) {
+      const crew = (g && g.refs) || [];
+      const raise = (sp, y) => { const b = shapeByName(x, sp); if (b) x = x.slice(0, b[0]) + x.slice(b[0], b[1]).replace(/(<a:off x="-?\d+" y=")-?\d+"/, `$1${y}"`) + x.slice(b[1]); };
+      for (const n of [1, 2, 3]) {
+        const r = crew[n - 1];
+        if (!(r && REF_PHOTOS.has(r.key))) raise(`Referee ${n} name`, REF_NAME_Y);
+        if (!crew.length) { const i = x.indexOf(`<a:t>(${n})</a:t>`); if (i >= 0) x = x.slice(0, x.lastIndexOf("<p:sp>", i)) + x.slice(x.indexOf("</p:sp>", i) + 7); }
+      }
+      for (const pic of [...x.matchAll(/<p:pic>[\s\S]*?<\/p:pic>/g)].map(m => m[0]).filter(p => /name="Referee \d photo"/.test(p))) {
+        const r = crew[Number(pic.match(/name="Referee (\d) photo"/)[1]) - 1];
+        let img = null;
+        if (r && REF_PHOTOS.has(r.key)) { try { const res = await fetch(`referees/${r.key}.jpg`); if (res.ok) { const bytes = new Uint8Array(await res.arrayBuffer()), bmp = await createImageBitmap(new Blob([bytes])); img = { bytes, w: bmp.width, h: bmp.height }; } } catch (e) { console.warn("referee photo not loaded", e); } }
+        if (img) {
+          const media = `ppt/media/referee_${r.key}.jpeg`, rid = "rIdRef_" + r.key; zip.file(media, img.bytes);
+          rels = rels.replace("</Relationships>", `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${media.split("/").pop()}"/></Relationships>`);
+          x = x.replace(pic, fitPic(pic, rid, `${r.first} ${r.last}`, img));
+        } else x = x.replace(pic, "");
+      }
+      x = x.replace(/\{\{ref(\d)_(first|last)\}\}/g, (m, n, part) => { const r = crew[n - 1]; return xesc(r ? r[part] : !crew.length && n === "1" && part === "last" ? "TBA" : ""); });
+      changed = true;
+    }
     // roster by position
     if (/<a:t>PG<\/a:t>/.test(x) && /<a:t>SG<\/a:t>/.test(x)) {
       const ti = x.indexOf("<a:tbl>"), te = x.indexOf("</a:tbl>", ti) + 8;
@@ -953,7 +978,7 @@ function applyState() { const s = store.state; tags = s.tags && s.tags.list || n
 async function boot() {
   try { DATA = await (await fetch("data/rosters.json", { cache: "no-store" })).json(); }
   catch { setStatus("data/rosters.json not found: run build.py"); return; }
-  ROSTERS = DATA.teams; ASOF = DATA.asof; PHOTO_IDS = new Set(DATA.photos || []); LOGO_IDS = new Set(DATA.logos || []);
+  ROSTERS = DATA.teams; ASOF = DATA.asof; PHOTO_IDS = new Set(DATA.photos || []); LOGO_IDS = new Set(DATA.logos || []); REF_PHOTOS = new Set(DATA.refphotos || []);
   $("#foot").append(`Rosters and season averages from bc-roma-2627-analysis (data/team_rosters.csv, data/eurocup/people.csv, data/box_scores.csv, data/eurocup_2026_raw.txt) as of ${ASOF}; the league's listed role is the starting value. Author: Giulia Martini.`);
   renderTagManager(); renderTeams();
   const firstUp = ROSTERS.find(nextGame); if (firstUp) select(firstUp.id);

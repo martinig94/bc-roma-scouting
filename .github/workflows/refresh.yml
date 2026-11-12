@@ -1,11 +1,14 @@
 # Refresh rosters, season averages and photos from bc-roma-2627-analysis every morning,
-# after that repo's own collection (06:40 UTC), and commit when something changed.
-# Also runs on demand from the Actions tab. GitHub Pages redeploys on the commit.
+# after that repo's own collection (06:40 UTC), plus the referee crews of BC Roma's next games
+# (LBA and EuroCup designate them during the week, EuroCup sometimes only on game day, hence the
+# afternoon run). Commits when something changed. Also runs on demand from the Actions tab.
+# GitHub Pages redeploys on the commit.
 name: refresh data
 
 on:
   schedule:
-    - cron: "20 7 * * *"   # 07:20 UTC daily
+    - cron: "20 7 * * *"    # 07:20 UTC daily
+    - cron: "0 15 * * *"    # 15:00 UTC daily: crews published during the day
   workflow_dispatch:
 
 permissions:
