@@ -38,9 +38,11 @@ It also looks up the referee crew of BC Roma's games in the next 10 days: the LB
 legabasket.it and the EuroCup game on api-live.euroleague.net, crew chief first. LBA designates during the
 week (the crew for a Saturday game is usually out by Thursday); EuroCup can be as late as game day. The
 GitHub workflow runs at 07:20 and 15:00 UTC, so the page and the referees slide pick a crew up the same day.
-Neither API serves usable referee photos: put them in `referees/<surname>_<first name>.jpg` (lowercase,
-ASCII, `_` for spaces and punctuation, e.g. `capotorto_gianluca.jpg`); a referee without one gets a
-name-only column. Commit `referees/` with the next refresh.
+Each designated referee's photo comes from their profile on the referees' association site
+(`aiaponline.it/associati/<first name>-<surname>`) and is saved once as `referees/<surname>_<first name>.jpg`
+(lowercase, ASCII, `_` for spaces and punctuation, e.g. `capotorto_gianluca.jpg`). Foreign EuroCup referees
+have no profile there: drop a photo under that name by hand (a file already in `referees/` is never
+replaced); a referee without one gets a name-only column.
 
 ## Files
 
@@ -54,7 +56,7 @@ name-only column. Commit `referees/` with the next refresh.
 | `template.pptx` | the deck template: one slide carrying `{{name}} {{surname}} {{number}} {{height}} {{role}} {{hand}} {{minutes}} {{points}} {{stat_1}} {{stat_2}} {{bullet_1..3}} {{to_do1..3}} {{iso}} {{photo}}`, a CLOSE OUT table, parked 🔑/🚀 shapes; a cover with `<COMP> - GAME #n`; a roster table headed PG/SG/SF/PF/C; a stats table headed `FGM-A`; a referees slide with `{{ref1_first}} {{ref1_last}}` (crew chief) to `{{ref3_…}}` and pictures named `Referee 1 photo` to `Referee 3 photo` |
 | `logos/<team id>.png` | opponent crests (legabasket.it media CDN, EuroCup API); `lba-<team_id>` / `ec-<club code>` |
 | `photos/<player id>.jpg` | generated headshots |
-| `referees/<surname>_<first name>.jpg` | referee photos, added by hand |
+| `referees/<surname>_<first name>.jpg` | referee photos (AIAP profiles, or added by hand) |
 
 Team ids are `lba-<team_id>` (from `data/teams.csv` of the analysis repo) and `ec-<EuroLeague club code>`.
 

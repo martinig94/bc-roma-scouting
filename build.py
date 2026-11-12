@@ -12,14 +12,15 @@ Reads (all from the analysis repo):
 Fetches (network):
     lba-media S3 (picture_key), EuroCup photo_url    original headshots, once per player (kept at <= 640 px)
     legabasket.it match header, api-live.euroleague.net games   referee crews of games in the next REF_DAYS days
+    aiaponline.it/associati/<first-last>             those referees' profile photos, once per referee
 Writes:
     data/rosters.json   teams, players, stats, games (with "refs" once a crew is designated), plus the lists of
                         available photos, logos and referee photos
-    photos/<player id>.jpg
+    photos/<player id>.jpg, referees/<ref key>.jpg
 
 Run it whenever rosters or stats changed in the analysis repo (after its morning collection), then commit.
-Logos and referee photos are not touched: logos/<team id>.png and referees/<ref key>.jpg are maintained by hand
-(see README).
+Logos are not touched: logos/<team id>.png is maintained by hand (see README). A referee photo added by hand
+to referees/ is kept as it is.
 """
 from __future__ import annotations
 
@@ -42,6 +43,8 @@ EC_GAMES = "https://api-live.euroleague.net/v2/competitions/U/seasons/U{season}/
 HTTP_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; bc-roma-scouting)", "Accept": "application/json"}
 HTTP_TIMEOUT_S = 30
 REF_DAYS = 10   # crews are looked up only for games this close: they are designated a few days before
+AIAP = "https://www.aiaponline.it"   # the Italian referees' association: /associati/<first-last> has a profile photo
+REF_PHOTO_MAX = (480, 600)
 ROLE_LBA = {"Playmaker": "PG", "Play/Guardia": "PG/SG", "Guardia": "SG", "Guardia/Ala": "SG/SF", "Ala": "SF", "Ala/Centro": "PF/C", "Centro": "C", "-": ""}
 ROLE_EC = {"Guard": "SG", "Forward": "SF", "Center": "C"}
 MY_TEAM, MY_CODE = "BC Roma", "BCR"
@@ -176,6 +179,40 @@ def eurocup_crews(season: str, club: str) -> dict[str, list[dict]]:
     return out
 
 
+def referee_photo(r: dict, dest: Path) -> bool:
+    """Save the referee's AIAP profile photo as dest, unless dest already exists (a hand-added file wins).
+
+    Args:
+        r: A ref() entry; its first name and surname make the profile address.
+        dest: Output JPEG path.
+
+    Returns:
+        True when dest exists afterwards (foreign referees have no AIAP profile).
+    """
+    if dest.exists():
+        return True
+    slug = re.sub(r"\W+", "-", unicodedata.normalize("NFKD", f"{r['first']} {r['last']}").encode("ascii", "ignore").decode().lower()).strip("-")
+    try:
+        with urlopen(Request(f"{AIAP}/associati/{slug}", headers=HTTP_HEADERS), timeout=HTTP_TIMEOUT_S) as resp:
+            page = resp.read().decode("utf-8", "ignore")
+        src = re.search(r'alt="Foto di [^"]*"[^>]*?src="([^"]+)"', page)
+        if not src:
+            print(f"referee photo: no picture on the AIAP page of {r['first']} {r['last']}")
+            return False
+        with urlopen(Request(AIAP + src.group(1).replace("&amp;", "&"), headers=HTTP_HEADERS), timeout=HTTP_TIMEOUT_S) as resp:
+            data = io.BytesIO(resp.read())
+    except (HTTPError, URLError, TimeoutError) as exc:
+        print(f"referee photo: {r['first']} {r['last']} not found on AIAP ({exc})")
+        return False
+    from PIL import Image
+    with Image.open(data) as raw:
+        im = raw.convert("RGB")
+    im.thumbnail(REF_PHOTO_MAX)
+    dest.parent.mkdir(exist_ok=True)
+    im.save(dest, "JPEG", quality=88, optimize=True)
+    return True
+
+
 def headshot(url: str, fallback: Path, dest: Path) -> bool:
     """Write dest as a JPEG of at most PHOTO_MAX, from the league's original picture.
 
@@ -304,6 +341,8 @@ def main() -> None:
         t["games"].sort(key=lambda g: g["date"])
     out = sorted(teams.values(), key=lambda t: (min([g["date"] for g in t["games"] if not g["played"]] or ["9999"]), t["name"]))
 
+    for r in {r["key"]: r for t in out for g in t["games"] for r in g["refs"]}.values():
+        referee_photo(r, ROOT / "referees" / f"{r['key']}.jpg")
     logos = sorted(p.stem for p in (ROOT / "logos").glob("*.png"))
     ref_photos = sorted(p.stem for p in (ROOT / "referees").glob("*.jpg"))
     (ROOT / "data").mkdir(exist_ok=True)
