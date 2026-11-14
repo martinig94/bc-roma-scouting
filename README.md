@@ -53,7 +53,7 @@ replaced); a referee without one gets a name-only column.
 | `build.py` | data refresh from the analysis repo |
 | `data/rosters.json` | generated: rosters, stats, games, photo and logo lists |
 | `data/scouting.json` | your notes (players, tag lists, team settings, template choice) |
-| `template.pptx` | the deck template: one slide carrying `{{name}} {{surname}} {{number}} {{height}} {{role}} {{hand}} {{minutes}} {{points}} {{stat_1}} {{stat_2}} {{bullet_1..3}} {{to_do1..3}} {{iso}} {{photo}}`, a CLOSE OUT table, parked 🔑/🚀 shapes; a cover with `<COMP> - GAME #n`; a roster table headed PG/SG/SF/PF/C; a stats table headed `FGM-A`; a referees slide with `{{ref1_first}} {{ref1_last}}` (crew chief) to `{{ref3_…}}` and pictures named `Referee 1 photo` to `Referee 3 photo` |
+| `template.pptx` | the deck template: one slide carrying `{{name}} {{surname}} {{number}} {{height}} {{role}} {{hand}} {{minutes}} {{points}} {{stat_1}} {{stat_2}} {{bullet_1..3}} {{to_do1..3}} {{iso}} {{photo}}`, a CLOSE OUT table, parked 🔑/🚀 shapes; a cover with `<COMP> - GAME #n`; an `OFFENSIVE` / `Defensive` slide with one bulleted text box each and a `Keys to` `WIN` slide with one bulleted box (defence keys, an empty line, offence keys), all rewritten from the team's "Slide 2–3 text" boxes when filled; a roster table headed PG/SG/SF/PF/C; a stats table headed `FGM-A`; a referees slide with `{{ref1_first}} {{ref1_last}}` (crew chief) to `{{ref3_…}}` and pictures named `Referee 1 photo` to `Referee 3 photo` |
 | `logos/<team id>.png` | opponent crests (legabasket.it media CDN, EuroCup API); `lba-<team_id>` / `ec-<club code>` |
 | `photos/<player id>.jpg` | generated headshots |
 | `referees/<surname>_<first name>.jpg` | referee photos (AIAP profiles, or added by hand) |

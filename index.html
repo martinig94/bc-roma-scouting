@@ -131,6 +131,10 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
 .roster-order { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 12px; }
 .roster-order .ordered { flex-direction: column; align-items: stretch; }
 .roster-order .item { justify-content: space-between; }
+.slide-text { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 12px; }
+.slide-text p { grid-column: 1 / -1; margin: 0; }
+.slide-text label { display: flex; flex-direction: column; gap: 4px; }
+.slide-text textarea { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 6px 8px; font-size: 13px; resize: vertical; }
 .fields { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .fields select, .fields input[type="text"] { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
 .fields input[type="text"] { min-width: 160px; }
@@ -164,8 +168,16 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
       <span class="group"><span class="lbl">Deck name</span><input type="text" id="team-short" placeholder="e.g. BOSNA" aria-label="Team name on the slides"></span>
       <span class="group"><span class="lbl">Logo</span><span id="team-logo-name">none</span><label class="btn" id="logo-upload-lbl" hidden>Upload logo <input type="file" id="logo-upload" accept="image/png,image/jpeg" hidden></label><button class="btn" id="logo-remove" hidden>Remove</button></span>
       <button class="btn" id="toggle-roster-order" aria-expanded="false">Roster slide order</button>
+      <button class="btn" id="toggle-slide-text" aria-expanded="false">Slide 2–3 text</button>
     </div>
     <div class="panel roster-order" id="roster-order" hidden></div>
+    <div class="panel slide-text" id="slide-text" hidden>
+      <p>One bullet per line. A box left empty keeps the template's own text.</p>
+      <label><span class="lbl">Slide 2 · Offensive</span><textarea rows="4" data-key="offense"></textarea></label>
+      <label><span class="lbl">Slide 2 · Defensive</span><textarea rows="4" data-key="defense"></textarea></label>
+      <label><span class="lbl">Slide 3 · Keys to win, defence</span><textarea rows="4" data-key="keysDefense"></textarea></label>
+      <label><span class="lbl">Slide 3 · Keys to win, offence</span><textarea rows="4" data-key="keysOffense"></textarea></label>
+    </div>
     <div class="tools">
       <button class="btn" id="toggle-tags" aria-expanded="false">Manage tags</button>
       <button class="btn" id="copy-json">Copy JSON</button>
@@ -275,6 +287,8 @@ const shortName = (t) => (teamCfg[t.id] && teamCfg[t.id].short) || SHORT[t.name]
 // a team's logo: one uploaded for it, else the built-in logos/<team id>.png (from legabasket.it and the EuroCup API)
 const logoUrl = (t) => { const c = teamCfg[t.id] || {}; return c.logoUrl ? c.logoUrl : c.logoAssetId ? "/_blob/" + c.logoAssetId : LOGO_IDS.has(t.id) ? "logos/" + t.id + ".png" : ""; };
 const $ = (s) => document.querySelector(s);
+const SLIDE_TEXT = [...document.querySelectorAll("#slide-text textarea")];   // one box per bullet group, keyed by data-key
+const bulletLines = (text) => { const lines = (text || "").split("\n").map(s => s.trim()).filter(Boolean); return lines.length ? lines : null; };
 const el = (tag, attrs = {}, ...kids) => { const n = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v); } for (const k of kids) n.append(k); return n; };
 const fmtDate = (d) => { const [y, m, dd] = d.split("-"); return `${dd}/${m}`; };
 const nextGame = (t) => t.games.find(g => g.date >= TODAY);
@@ -346,6 +360,7 @@ function renderRoster() {
   else ln.append("none (slide 1 gets no logo)");
   $("#logo-remove").hidden = !(cfg.logoUrl || cfg.logoAssetId);
   renderRosterOrder(t);
+  for (const ta of SLIDE_TEXT) if (document.activeElement !== ta) ta.value = cfg[ta.dataset.key] || "";
   const q = query.trim().toLowerCase();
   for (const p of t.players) {
     if (q && !p.name.toLowerCase().includes(q) && !t.name.toLowerCase().includes(q)) continue;
@@ -504,6 +519,14 @@ async function saveTeamCfg(id, patch) {
   try { await store.saveTeam(id, teamCfg[id]); setStatus("Saved"); } catch (e) { setStatus("Save failed (" + e.code + ")"); }
 }
 let shortTimer; $("#team-short").addEventListener("input", (e) => { clearTimeout(shortTimer); shortTimer = setTimeout(() => current && saveTeamCfg(current, { short: e.target.value.trim() }), 600); });
+// Slide 2-3 text: saved per team as typed, a while after the last key and at once on leaving the box
+for (const ta of SLIDE_TEXT) {
+  let timer;
+  const commit = (id) => { clearTimeout(timer); if (id && ((teamCfg[id] || {})[ta.dataset.key] || "") !== ta.value) saveTeamCfg(id, { [ta.dataset.key]: ta.value }); };
+  ta.addEventListener("input", () => { const id = current; clearTimeout(timer); timer = setTimeout(() => commit(id), 600); });
+  ta.addEventListener("change", () => commit(current));
+}
+$("#toggle-slide-text").addEventListener("click", (e) => { const m = $("#slide-text"); m.hidden = !m.hidden; e.currentTarget.setAttribute("aria-expanded", String(!m.hidden)); });
 $("#logo-upload").addEventListener("change", async (e) => {
   const f = e.target.files[0]; if (!f || !store.canUpload || !current) return;
   setStatus("Uploading logo…", true);
@@ -816,8 +839,24 @@ const cellsOf = (row) => [...row.matchAll(/<a:tc(?: [^>]*)?>[\s\S]*?<\/a:tc>/g)]
 const cellText = (c) => [...c.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(m => m[1]).join("");
 function setCellText(c, text) {
   let first = true;
-  const out = c.replace(/<a:r>[\s\S]*?<\/a:r>/g, (run) => { if (!first) return ""; first = false; return run.replace(/<a:t>[^<]*<\/a:t>/, "<a:t>" + xesc(text) + "</a:t>"); });
+  const out = c.replace(/<a:r>[\s\S]*?<\/a:r>/g, (run) => { if (!first) return ""; first = false; return run.replace(/<a:t>[^<]*<\/a:t>/, () => "<a:t>" + xesc(text) + "</a:t>"); });
   return first ? out : out;   // a cell without a run stays as it is (empty)
+}
+// A bulleted text box rewritten group by group (its empty paragraphs split the groups): a group whose lines are
+// given gets one copy of its first paragraph per line, a group without lines keeps the template's text.
+function setBullets(sp, groups) {
+  let g = 0, first = true;
+  return sp.replace(/<a:p>[\s\S]*?<\/a:p>/g, (para) => {
+    if (!para.includes("<a:r>")) { g++; first = true; return para; }
+    const lines = groups[g]; if (!lines) return para;
+    if (!first) return ""; first = false;
+    return lines.map(l => setCellText(para, l)).join("");
+  });
+}
+// the slide's bulleted text boxes, in order, each rewritten with its own groups of lines
+function setBulletBoxes(x, boxes) {
+  let n = 0;
+  return x.replace(/<p:sp>[\s\S]*?<\/p:sp>/g, (sp) => sp.includes("<a:buChar") && boxes[n] ? setBullets(sp, boxes[n++]) : sp);
 }
 // a long surname is set smaller instead of wrapping: the cell's run size scales down past `fit` characters
 function fitCellText(c, text, fit) {
@@ -856,6 +895,12 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
         } else x = x.replace(pic, "");
       }
     }
+    // slide 2 (OFFENSIVE over Defensive, one bulleted box each) and slide 3 (Keys to WIN: one box, the defence keys,
+    // an empty line, the offence keys): the team's own bullets where typed
+    const cfg = teamCfg[t.id] || {};
+    const boxes = /<a:t>OFFENSIVE<\/a:t>/i.test(x) && /<a:t>DEFENSIVE<\/a:t>/i.test(x) ? [[bulletLines(cfg.offense)], [bulletLines(cfg.defense)]]
+      : /<a:t>Keys to<\/a:t>/i.test(x) ? [[bulletLines(cfg.keysDefense), bulletLines(cfg.keysOffense)]] : null;
+    if (boxes && boxes.flat().some(Boolean)) { x = setBulletBoxes(x, boxes); changed = true; }
     // referees: the designated crew of the game (crew chief = {{ref1_…}}), each photo a head shot of
     // referees/<key>.jpg, the surname in script over the first name; a referee without a photo has the name raised into
     // the photo's place. Before the designation the slide reads TBA, without numbers.
@@ -993,7 +1038,7 @@ async function boot() {
     tags: (l) => { tags = l; renderTagManager(); renderRoster(); },
     todos: (l) => { todos = l; renderTagManager(); renderRoster(); },
     template: (c) => { tplConfig = c; renderTagManager(); },
-    teams: (m) => { teamCfg = m; if (document.activeElement !== $("#team-short")) renderRoster(); },
+    teams: (m) => { teamCfg = m; if (document.activeElement !== $("#team-short")) renderRoster(); },   // a focused slide-text box is left alone by renderRoster
     players: (m) => {
       saved = m; renderTeams(); renderTagManager();
       const a = document.activeElement;
