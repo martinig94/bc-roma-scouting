@@ -18,7 +18,8 @@ versioned with the repo (commit after a scouting session). Uploading a new templ
 the page writes `template.pptx` / `logos/<team>.png` as well.
 
 The page also works without the server, e.g. on GitHub Pages or `python -m http.server`: then the notes stay
-in that browser (localStorage) and travel through the *Download / Import scouting.json* buttons. Keep in mind
+in that browser (localStorage) and travel through the *Download / Import scouting.json* buttons. A team logo can still be uploaded there (up to
+300 KB, kept with the notes); a new template cannot. Keep in mind
 that a GitHub Pages site of a free account is public.
 
 ## Refresh rosters and stats

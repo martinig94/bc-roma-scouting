@@ -226,7 +226,8 @@ const DEFAULT_TODOS = ["go under on P&R","go over on P&R","switch","ICE the side
 const ROLES = ["PG","SG","SF","PF","C"];
 const HANDS = [["L","Left"],["R","Right"],["?","Unknown"]];
 const STATS = [["reb","REB"],["oreb","OREB"],["ast","AST"],["stl","STL"],["blk","BLK"],["to","TO"],["pf","PF"],["fg2p","2PT%"],["fg3p","3PT%"],["fg3a","3PA"],["ftp","FT%"],["pir","PIR"]];
-const TODAY = new Date().toISOString().slice(0, 10);
+const LOGO_MAX_BYTES = 300 * 1024;   // browser-only mode: the logo lives in localStorage with the notes (about 5 MB in all)
+const TODAY =new Date().toISOString().slice(0, 10);
 
 let tags = null, todos = null, saved = {}, current = null, query = "", tplConfig = null, teamCfg = {};
 
@@ -266,7 +267,13 @@ const store = {
     if (this.mode === "server") return this.post("team/" + encodeURIComponent(id), cfg); this.local();
   },
   // template .pptx (kind "template") or a team logo (kind "logo", with the team id): resolves {url, name}
+  // (browser-only mode has no file store: a logo, and only a logo, is kept in the notes as a data URL)
+  get canUploadLogo() { return this.canUpload || this.mode === "local"; },
   async upload(kind, file, id) {
+    if (this.mode === "local") {
+      if (file.size > LOGO_MAX_BYTES) throw new Error(`logo over ${LOGO_MAX_BYTES / 1024} KB, use a smaller image`);
+      return { url: await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error); fr.readAsDataURL(file); }), name: file.name };
+    }
     if (this.mode === "artifact") {
       if (kind === "template") { const b64 = bytesToB64(new Uint8Array(await file.arrayBuffer())); const up = await this.assets.upload(new File([b64], file.name.replace(/\.pptx$/i, "") + ".b64.txt", { type: "text/plain" })); return { url: "/_blob/" + up.id, assetId: up.id, name: file.name, b64: true }; }
       const up = await this.assets.upload(file); return { url: "/_blob/" + up.id, assetId: up.id, name: file.name, type: file.type };
@@ -542,7 +549,7 @@ document.addEventListener("click", closeMenus);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); });
 $("#toggle-slide-text").addEventListener("click", (e) => { const m = $("#slide-text"); m.hidden = !m.hidden; e.currentTarget.setAttribute("aria-expanded", String(!m.hidden)); });
 $("#logo-upload").addEventListener("change", async (e) => {
-  const f = e.target.files[0]; if (!f || !store.canUpload || !current) return;
+  const f = e.target.files[0]; if (!f || !store.canUploadLogo || !current) return;
   setStatus("Uploading logo…", true);
   try { const old = (teamCfg[current] || {}).logoAssetId; const up = await store.upload("logo", f, current); await saveTeamCfg(current, { logoUrl: up.url, logoAssetId: up.assetId || "", logoName: f.name, logoType: f.type }); await store.discard(old); renderRoster(); }
   catch (err) { setStatus("Upload failed: " + (err && (err.code || err.message))); }
@@ -1045,7 +1052,7 @@ async function boot() {
   await store.detect();
   const dl = store.mode !== "artifact" || !!store.downloads;
   if (dl) { $("#export-menu").hidden = false; if (window.jspdf) $("#export-pdf").hidden = false; if (window.JSZip) { $("#export-pptx").hidden = false; $("#only-players-opt").hidden = false; } }
-  if (store.canUpload) { $("#tpl-upload-lbl").hidden = false; $("#logo-upload-lbl").hidden = false; }
+  $("#tpl-upload-lbl").hidden = !store.canUpload; $("#logo-upload-lbl").hidden = !store.canUploadLogo;
   if (store.mode === "local") { $("#export-state").hidden = false; $("#import-state-lbl").hidden = false; setStatus("Browser-only mode: notes stay in this browser; export scouting.json to keep them"); }
   if (!store.writable) { setStatus("Not signed in: edits are not saved"); return; }
   store.subscribe({
