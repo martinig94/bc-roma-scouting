@@ -80,6 +80,12 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
 .btn:hover { border-color: var(--ink); }
 .btn:disabled { opacity: .6; cursor: default; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.menu { position: relative; }
+.menu summary { list-style: none; cursor: pointer; user-select: none; }
+.menu summary::-webkit-details-marker { display: none; }
+.menu-items { position: absolute; top: 100%; left: 0; z-index: 5; margin-top: 4px; min-width: max-content; display: flex; flex-direction: column; gap: 2px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .15); }
+.menu-items .btn { border-color: transparent; text-align: left; }
+.menu-items .btn:hover { background: var(--chip); border-color: transparent; }
 .search { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 10px; font-size: 13px; min-width: 160px; }
 .opt { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
 
@@ -180,13 +186,17 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
     </div>
     <div class="tools">
       <button class="btn" id="toggle-tags" aria-expanded="false">Manage tags</button>
-      <button class="btn" id="copy-json">Copy JSON</button>
-      <button class="btn" id="export-csv" hidden>Export CSV</button>
-      <button class="btn" id="export-pdf" hidden>Export PDF</button>
+      <details class="menu"><summary class="btn">JSON ▾</summary><div class="menu-items">
+        <button class="btn" id="copy-json">Copy JSON</button>
+        <button class="btn" id="export-state" hidden>Download scouting.json</button>
+        <label class="btn" id="import-state-lbl" hidden>Import scouting.json <input type="file" id="import-state" accept=".json" hidden></label>
+      </div></details>
+      <details class="menu" id="export-menu" hidden><summary class="btn">Export ▾</summary><div class="menu-items">
+        <button class="btn" id="export-csv">Export CSV</button>
+        <button class="btn" id="export-pdf" hidden>Export PDF</button>
+      </div></details>
       <button class="btn primary" id="export-pptx" hidden>Build PowerPoint</button>
       <label class="opt" id="only-players-opt" hidden><input type="checkbox" id="only-players"> player slides only</label>
-      <button class="btn" id="export-state" hidden>Download scouting.json</button>
-      <label class="btn" id="import-state-lbl" hidden>Import scouting.json <input type="file" id="import-state" accept=".json" hidden></label>
     </div>
     <div class="panel" id="tagmgr" hidden>
       <h3>Tags</h3>
@@ -526,6 +536,10 @@ for (const ta of SLIDE_TEXT) {
   ta.addEventListener("input", () => { const id = current; clearTimeout(timer); timer = setTimeout(() => commit(id), 600); });
   ta.addEventListener("change", () => commit(current));
 }
+// the JSON and Export menus close on a pick, a click elsewhere, or Escape
+const closeMenus = (e) => { for (const m of document.querySelectorAll("details.menu[open]")) if (!e || !m.contains(e.target) || e.target.closest(".menu-items")) m.open = false; };
+document.addEventListener("click", closeMenus);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); });
 $("#toggle-slide-text").addEventListener("click", (e) => { const m = $("#slide-text"); m.hidden = !m.hidden; e.currentTarget.setAttribute("aria-expanded", String(!m.hidden)); });
 $("#logo-upload").addEventListener("change", async (e) => {
   const f = e.target.files[0]; if (!f || !store.canUpload || !current) return;
@@ -642,7 +656,7 @@ async function buildPdf(t) {
 }
 $("#export-pdf").addEventListener("click", async (e) => {
   const t = teamById(current); if (!t) return;
-  const btn = e.currentTarget; btn.disabled = true; btn.textContent = "Building PDF…";
+  const btn = e.currentTarget; btn.disabled = true; btn.textContent = "Building PDF…"; setStatus("Building PDF…", true);
   try { await store.saveFile(`scouting_${fileStem(t)}.pdf`, await buildPdf(t)); setStatus("PDF saved"); }
   catch (err) { setStatus(err && err.code === "declined" ? "PDF not saved" : "PDF failed (" + (err && (err.code || err.message)) + ")"); }
   btn.disabled = false; btn.textContent = "Export PDF";
@@ -1030,7 +1044,7 @@ async function boot() {
   const firstUp = ROSTERS.find(nextGame); if (firstUp) select(firstUp.id);
   await store.detect();
   const dl = store.mode !== "artifact" || !!store.downloads;
-  if (dl) { $("#export-csv").hidden = false; if (window.jspdf) $("#export-pdf").hidden = false; if (window.JSZip) { $("#export-pptx").hidden = false; $("#only-players-opt").hidden = false; } }
+  if (dl) { $("#export-menu").hidden = false; if (window.jspdf) $("#export-pdf").hidden = false; if (window.JSZip) { $("#export-pptx").hidden = false; $("#only-players-opt").hidden = false; } }
   if (store.canUpload) { $("#tpl-upload-lbl").hidden = false; $("#logo-upload-lbl").hidden = false; }
   if (store.mode === "local") { $("#export-state").hidden = false; $("#import-state-lbl").hidden = false; setStatus("Browser-only mode: notes stay in this browser; export scouting.json to keep them"); }
   if (!store.writable) { setStatus("Not signed in: edits are not saved"); return; }
