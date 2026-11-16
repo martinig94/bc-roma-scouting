@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["serve.py"],
       "port": 8787
+    },
+    {
+      "name": "scouting-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8788", "--bind", "127.0.0.1"],
+      "port": 8788
     }
   ]
 }
