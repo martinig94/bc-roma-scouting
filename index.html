@@ -174,7 +174,7 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
       <span class="group"><span class="lbl">Deck name</span><input type="text" id="team-short" placeholder="e.g. BOSNA" aria-label="Team name on the slides"></span>
       <span class="group"><span class="lbl">Logo</span><span id="team-logo-name">none</span><label class="btn" id="logo-upload-lbl" hidden>Upload logo <input type="file" id="logo-upload" accept="image/png,image/jpeg" hidden></label><button class="btn" id="logo-remove" hidden>Remove</button></span>
       <button class="btn" id="toggle-roster-order" aria-expanded="false">Roster slide order</button>
-      <button class="btn" id="toggle-slide-text" aria-expanded="false">Slide 2–3 text</button>
+      <button class="btn" id="toggle-slide-text" aria-expanded="false">Game plan</button>
     </div>
     <div class="panel roster-order" id="roster-order" hidden></div>
     <div class="panel slide-text" id="slide-text" hidden>
@@ -536,7 +536,7 @@ async function saveTeamCfg(id, patch) {
   try { await store.saveTeam(id, teamCfg[id]); setStatus("Saved"); } catch (e) { setStatus("Save failed (" + e.code + ")"); }
 }
 let shortTimer; $("#team-short").addEventListener("input", (e) => { clearTimeout(shortTimer); shortTimer = setTimeout(() => current && saveTeamCfg(current, { short: e.target.value.trim() }), 600); });
-// Slide 2-3 text: saved per team as typed, a while after the last key and at once on leaving the box
+// Game plan (the text of slides 2 and 3): saved per team as typed, a while after the last key and at once on leaving the box
 for (const ta of SLIDE_TEXT) {
   let timer;
   const commit = (id) => { clearTimeout(timer); if (id && ((teamCfg[id] || {})[ta.dataset.key] || "") !== ta.value) saveTeamCfg(id, { [ta.dataset.key]: ta.value }); };
