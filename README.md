@@ -22,6 +22,26 @@ in that browser (localStorage) and travel through the *Download / Import scoutin
 300 KB, kept with the notes); a new template cannot. Keep in mind
 that a GitHub Pages site of a free account is public.
 
+## Share the notes (Supabase)
+
+For a staff working on the same notes from their own devices, the page (on GitHub Pages or any static host)
+can keep them in a [Supabase](https://supabase.com) project: everyone signs in with an email and password,
+and an edit shows up in the others' browsers as it is saved. The free plan is enough for a handful of users;
+it pauses a project after about a week without activity (restore it from the dashboard).
+
+1. Create a Supabase project and run `supabase/setup.sql` in its SQL editor.
+2. Authentication > Sign In / Providers: turn **off** "Allow new users to sign up". The database lets every
+   signed-in user read and write, so with sign-ups on anybody could register and get in.
+3. Authentication > Users > Add user, with "Auto Confirm User": one per person (email and password).
+4. Project Settings > API: copy the project URL and the publishable (anon) key into `SUPABASE` at the top of
+   the script in `index.html`. Both are meant to be public. Never put the secret (service role) key there.
+5. Open the page, sign in, and bring the existing notes in with *JSON > Import scouting.json*.
+
+*JSON > Download scouting.json* gives a backup of the shared notes. Two people saving the same player (or the
+same team's settings) at the same moment: the last save wins. An uploaded template or logo goes to the
+project's `scouting` storage bucket, which is readable by link. Behind `serve.py` the page keeps using
+`data/scouting.json`, whatever `SUPABASE` says.
+
 ## Refresh rosters and stats
 
 ```bash
@@ -51,6 +71,7 @@ replaced); a referee without one gets a name-only column.
 |---|---|
 | `index.html` | the page (vanilla JS; jsPDF and JSZip from cdnjs) |
 | `serve.py` | local server + save API |
+| `supabase/setup.sql` | table, access rules and storage bucket of the shared (Supabase) mode |
 | `build.py` | data refresh from the analysis repo |
 | `data/rosters.json` | generated: rosters, stats, games, photo and logo lists |
 | `data/scouting.json` | your notes (players, tag lists, team settings, template choice) |
@@ -64,4 +85,5 @@ Team ids are `lba-<team_id>` (from `data/teams.csv` of the analysis repo) and `e
 ## The same page on claude.ai
 
 The page detects where it runs: on claude.ai (as an artifact) it uses the artifact's own database and
-file-save prompt; behind `serve.py` it uses the save API; anywhere else it is browser-only.
+file-save prompt; behind `serve.py` it uses the save API; with `SUPABASE` filled in it uses that project; anywhere else it is
+browser-only.

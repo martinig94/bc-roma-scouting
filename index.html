@@ -148,6 +148,13 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
 .note::placeholder { color: var(--muted); }
 .empty { color: var(--muted); padding: 30px 0; text-align: center; }
 .foot { margin-top: 24px; font-size: 11px; color: var(--muted); }
+.signin { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); padding: 18px; width: min(320px, calc(100vw - 32px)); }
+.signin::backdrop { background: var(--bg); }
+.signin form { display: flex; flex-direction: column; gap: 10px; }
+.signin h3, .signin p { margin: 0; }
+.signin p { font-size: 12px; color: var(--muted); min-height: 1.4em; }
+.signin label { display: flex; flex-direction: column; gap: 4px; }
+.signin input { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 6px 10px; }
 @media (prefers-reduced-motion: no-preference) { .chip, .teams button { transition: background .12s, color .12s; } }
 </style>
 
@@ -197,6 +204,7 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
       </div></details>
       <button class="btn primary" id="export-pptx" hidden>Build PowerPoint</button>
       <label class="opt" id="only-players-opt" hidden><input type="checkbox" id="only-players"> player slides only</label>
+      <button class="btn" id="sign-out" hidden>Sign out</button>
     </div>
     <div class="panel" id="tagmgr" hidden>
       <h3>Tags</h3>
@@ -215,6 +223,15 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
     <p class="foot" id="foot"></p>
   </section>
 </div>
+<dialog class="signin" id="signin">
+  <form>
+    <h3>Sign in</h3>
+    <label><span class="lbl">Email</span><input type="email" name="email" autocomplete="username" required></label>
+    <label><span class="lbl">Password</span><input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="btn primary" type="submit">Sign in</button>
+    <p id="signin-msg" role="status"></p>
+  </form>
+</dialog>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -231,9 +248,28 @@ const TODAY =new Date().toISOString().slice(0, 10);
 
 let tags = null, todos = null, saved = {}, current = null, query = "", tplConfig = null, teamCfg = {};
 
-// ---- where the notes live: the claude.ai artifact store, the local serve.py, or this browser only ----
+// Hosted mode: the URL and publishable (anon) key of a Supabase project prepared with supabase/setup.sql.
+// Both are public by design (the database rules let only signed-in users in); an empty url turns the mode off.
+const SUPABASE = { url: "https://grbthyailtcspnrszsjk.supabase.co", key: "sb_publishable_5paj5RHHp38qIsmoFvTKpw_SG_mUjka" };
+const SUPABASE_JS = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js";
+const CLIENT = crypto.randomUUID();   // marks this tab's writes, so their live echo is skipped
+const sbOk = ({ data, error }) => { if (error) throw Object.assign(new Error(error.message), { code: error.code || error.statusCode || "supabase" }); return data; };
+// the sign-in dialog: resolves with the session once an email and password are accepted
+function signIn(sb) {
+  const dlg = $("#signin"), form = dlg.querySelector("form"), msg = $("#signin-msg");
+  dlg.addEventListener("cancel", (e) => e.preventDefault());
+  dlg.showModal();
+  return new Promise((resolve) => form.addEventListener("submit", async (e) => {
+    e.preventDefault(); msg.textContent = "Signing in…";
+    const { data, error } = await sb.auth.signInWithPassword({ email: form.email.value.trim(), password: form.password.value });
+    if (error) { msg.textContent = error.message; return; }
+    dlg.close(); resolve(data.session);
+  }));
+}
+
+// ---- where the notes live: the claude.ai artifact store, the local serve.py, a Supabase project, or this browser only ----
 const store = {
-  mode: "local", writable: true, canUpload: false, db: null, downloads: null, assets: null,
+  mode: "local", writable: true, canUpload: false, db: null, downloads: null, assets: null, sb: null, user: "", problem: "",
   async detect() {
     if (window.claude && window.claude.use) {
       this.mode = "artifact";
@@ -244,26 +280,58 @@ const store = {
       return;
     }
     try { const r = await fetch("api/state", { cache: "no-store" }); if (r.ok) { this.mode = "server"; this.state = await r.json(); this.canUpload = true; return; } } catch {}
+    if (SUPABASE.url) {
+      this.mode = "supabase";
+      try { await this.connect(); this.canUpload = true; } catch (e) { this.writable = false; this.problem = "Supabase unavailable (" + (e.code || e.message || "network") + "): edits are not saved"; }
+      return;
+    }
     this.mode = "local";
     try { this.state = JSON.parse(localStorage.getItem("bc-roma-scouting") || "{}"); } catch { this.state = {}; }
   },
-  // the whole state, for the server and browser modes
+  // the whole state, for the server, Supabase and browser modes
   state: {},
   local() { try { localStorage.setItem("bc-roma-scouting", JSON.stringify(this.state)); } catch {} },
+  // Supabase: one row per player, team and config in scouting_docs (kind, id, body)
+  async connect() {
+    await new Promise((res, rej) => document.head.append(el("script", { src: SUPABASE_JS, onload: res, onerror: rej })));
+    this.sb = window.supabase.createClient(SUPABASE.url, SUPABASE.key);
+    const session = sbOk(await this.sb.auth.getSession()).session || await signIn(this.sb);
+    this.user = session.user.email;
+    await this.pull();
+  },
+  async pull() { this.state = {}; for (const row of sbOk(await this.sb.from("scouting_docs").select("kind,id,body"))) this.absorb(row); },
+  absorb({ kind, id, body }) {   // a null body removes the entry
+    const into = kind === "config" ? this.state : (this.state[kind + "s"] = { ...this.state[kind + "s"] });
+    if (body) into[id] = body; else delete into[id];
+  },
+  async put(kind, id, body) {
+    const docs = this.sb.from("scouting_docs");
+    sbOk(await (body ? docs.upsert({ kind, id, body, client: CLIENT }) : docs.delete().match({ kind, id })));
+  },
+  // an imported scouting.json: browser mode replaces the notes, Supabase mode writes its entries over the shared ones
+  async importState(s) {
+    if (this.mode !== "supabase") { this.state = s; return this.local(); }
+    const rows = (kind, map) => Object.entries(map || {}).filter(([, body]) => body).map(([id, body]) => ({ kind, id, body, client: CLIENT }));
+    sbOk(await this.sb.from("scouting_docs").upsert([...rows("player", s.players), ...rows("team", s.teams), ...rows("config", { tags: s.tags, todos: s.todos, template: s.template })]));
+    await this.pull();
+  },
   async post(path, body) { const r = await fetch("api/" + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!r.ok) throw Object.assign(new Error("save failed"), { code: "http_" + r.status }); },
   async savePlayer(id, body) {
     if (this.mode === "artifact") return this.db.doc("scouting/" + id).set(body);
     (this.state.players = this.state.players || {})[id] = body;
+    if (this.mode === "supabase") return this.put("player", id, body);
     if (this.mode === "server") return this.post("player/" + encodeURIComponent(id), body); this.local();
   },
   async saveConfig(kind, obj) {   // kind: tags | todos | template; obj null deletes
     if (this.mode === "artifact") return obj ? this.db.doc("config/" + kind).set(obj) : this.db.doc("config/" + kind).delete();
     if (obj) this.state[kind] = obj; else delete this.state[kind];
+    if (this.mode === "supabase") return this.put("config", kind, obj);
     if (this.mode === "server") return this.post("config/" + kind, obj || {}); this.local();
   },
   async saveTeam(id, cfg) {
     if (this.mode === "artifact") return this.db.doc("teams/" + id).set(cfg);
     (this.state.teams = this.state.teams || {})[id] = cfg;
+    if (this.mode === "supabase") return this.put("team", id, cfg);
     if (this.mode === "server") return this.post("team/" + encodeURIComponent(id), cfg); this.local();
   },
   // template .pptx (kind "template") or a team logo (kind "logo", with the team id): resolves {url, name}
@@ -278,6 +346,11 @@ const store = {
       if (kind === "template") { const b64 = bytesToB64(new Uint8Array(await file.arrayBuffer())); const up = await this.assets.upload(new File([b64], file.name.replace(/\.pptx$/i, "") + ".b64.txt", { type: "text/plain" })); return { url: "/_blob/" + up.id, assetId: up.id, name: file.name, b64: true }; }
       const up = await this.assets.upload(file); return { url: "/_blob/" + up.id, assetId: up.id, name: file.name, type: file.type };
     }
+    if (this.mode === "supabase") {   // the public "scouting" bucket; ?v= gets past the CDN's copy of a replaced file
+      const files = this.sb.storage.from("scouting"), path = kind === "template" ? "template.pptx" : `logos/${id}.${file.type === "image/png" ? "png" : "jpg"}`;
+      sbOk(await files.upload(path, file, { upsert: true, contentType: file.type || "application/octet-stream" }));
+      return { url: files.getPublicUrl(path).data.publicUrl + "?v=" + Date.now(), name: file.name };
+    }
     const r = await fetch("api/upload/" + kind + (id ? "/" + encodeURIComponent(id) : ""), { method: "POST", headers: { "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(file.name) }, body: await file.arrayBuffer() });
     if (!r.ok) throw Object.assign(new Error("upload failed"), { code: "http_" + r.status }); return r.json();
   },
@@ -288,9 +361,19 @@ const store = {
   },
   templateUrl() { return tplConfig && tplConfig.url ? tplConfig.url : tplConfig && tplConfig.assetId ? "/_blob/" + tplConfig.assetId : this.mode === "artifact" ? "template.b64.txt" : "template.pptx"; },
   templateIsB64() { return this.mode === "artifact" ? !(tplConfig && tplConfig.url && !tplConfig.b64) : !!(tplConfig && tplConfig.b64); },
-  // feed the page: once (server/local) or live (artifact)
+  // feed the page: once (server/local), once and then on every change by someone else (Supabase), or live (artifact)
   subscribe(on) {
-    if (this.mode !== "artifact") { const s = this.state; on.tags(s.tags && s.tags.list); on.todos(s.todos && s.todos.list); on.template(s.template || null); on.teams(s.teams || {}); on.players(s.players || {}); return; }
+    if (this.mode !== "artifact") {
+      const list = (kind) => this.state[kind] && this.state[kind].list;
+      const feed = { tags: () => on.tags(list("tags")), todos: () => on.todos(list("todos")), template: () => on.template(this.state.template || null), team: () => on.teams(this.state.teams || {}), player: () => on.players(this.state.players || {}) };
+      for (const send of Object.values(feed)) send();
+      if (this.mode === "supabase") this.sb.channel("scouting").on("postgres_changes", { event: "*", schema: "public", table: "scouting_docs" }, (ev) => {
+        const row = ev.eventType === "DELETE" ? { ...ev.old, body: null } : ev.new;
+        if (row.client === CLIENT) return;
+        this.absorb(row); feed[row.kind === "config" ? row.id : row.kind]();
+      }).subscribe();
+      return;
+    }
     const db = this.db;
     db.doc("config/tags").onSnapshot(s => on.tags(s.exists ? s.data().list : null), e => setStatus("Tags unavailable (" + e.code + ")"));
     db.doc("config/todos").onSnapshot(s => on.todos(s.exists ? s.data().list : null), e => setStatus("To-dos unavailable (" + e.code + ")"));
@@ -1037,9 +1120,13 @@ $("#tpl-reset").addEventListener("click", async () => {
 $("#export-state").addEventListener("click", () => store.saveFile("scouting.json", JSON.stringify(store.state, null, 2)));
 $("#import-state").addEventListener("change", async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try { const s = JSON.parse(await f.text()); store.state = s; store.local(); applyState(); setStatus("scouting.json imported"); } catch { setStatus("Not a scouting.json file"); }
+  let s; try { s = JSON.parse(await f.text()); } catch { setStatus("Not a scouting.json file"); }
+  if (s && (store.mode !== "supabase" || confirm("Write this file over the shared notes? Every player and team in it replaces the one everybody sees."))) {
+    try { await store.importState(s); applyState(); setStatus("scouting.json imported"); } catch (err) { setStatus("Import failed (" + err.code + ")"); }
+  }
   e.target.value = "";
 });
+$("#sign-out").addEventListener("click", async () => { await store.sb.auth.signOut(); location.reload(); });
 function applyState() { const s = store.state; tags = s.tags && s.tags.list || null; todos = s.todos && s.todos.list || null; tplConfig = s.template || null; teamCfg = s.teams || {}; saved = s.players || {}; renderTagManager(); renderTeams(); renderRoster(); }
 
 async function boot() {
@@ -1053,8 +1140,10 @@ async function boot() {
   const dl = store.mode !== "artifact" || !!store.downloads;
   if (dl) { $("#export-menu").hidden = false; if (window.jspdf) $("#export-pdf").hidden = false; if (window.JSZip) { $("#export-pptx").hidden = false; $("#only-players-opt").hidden = false; } }
   $("#tpl-upload-lbl").hidden = !store.canUpload; $("#logo-upload-lbl").hidden = !store.canUploadLogo;
-  if (store.mode === "local") { $("#export-state").hidden = false; $("#import-state-lbl").hidden = false; setStatus("Browser-only mode: notes stay in this browser; export scouting.json to keep them"); }
-  if (!store.writable) { setStatus("Not signed in: edits are not saved"); return; }
+  if (store.mode === "local" || store.user) { $("#export-state").hidden = false; $("#import-state-lbl").hidden = false; }
+  if (store.mode === "local") setStatus("Browser-only mode: notes stay in this browser; export scouting.json to keep them");
+  $("#sign-out").hidden = !store.user;
+  if (!store.writable) { setStatus(store.problem || "Not signed in: edits are not saved"); return; }
   store.subscribe({
     tags: (l) => { tags = l; renderTagManager(); renderRoster(); },
     todos: (l) => { todos = l; renderTagManager(); renderRoster(); },
@@ -1064,7 +1153,7 @@ async function boot() {
       saved = m; renderTeams(); renderTagManager();
       const a = document.activeElement;
       if (!(a && (a.classList.contains("note") || a.type === "text"))) renderRoster();
-      setStatus(Object.keys(saved).length + " players with notes" + (store.mode === "server" ? " · saving to data/scouting.json" : ""));
+      setStatus(Object.keys(saved).length + " players with notes" + (store.mode === "server" ? " · saving to data/scouting.json" : store.user ? " · shared · " + store.user : ""));
     }
   });
 }
