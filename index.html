@@ -129,6 +129,8 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
 .chip.co-yellow[aria-pressed="true"] { background: #ffc000; color: #1d2230; }
 .chip.star { padding: 3px 7px; }
 .tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.addbox { border: 1px dashed var(--muted); background: transparent; border-radius: 999px; padding: 3px 10px; font-size: 12px; line-height: 1.3; width: 17ch; }
+.addbox:focus { border-style: solid; }
 .ordered { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 12px; }
 .ordered .item { display: inline-flex; align-items: center; gap: 1px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 2px 1px 8px; }
 .ordered .item button { border: 0; background: transparent; padding: 0 4px; color: var(--muted); font-size: 12px; }
@@ -155,6 +157,22 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
 .signin p { font-size: 12px; color: var(--muted); min-height: 1.4em; }
 .signin label { display: flex; flex-direction: column; gap: 4px; }
 .signin input { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 6px 10px; }
+.preview { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); padding: 0; width: calc(100vw - 32px); max-width: 1500px; height: calc(100vh - 32px); max-height: none; }
+.preview[open] { display: flex; flex-direction: column; }
+.preview::backdrop { background: rgba(0, 0, 0, .55); }
+.preview-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.preview-bar h3 { margin: 0; font-size: 15px; }
+.preview-bar .status { flex: 1; min-width: 12ch; }
+.preview-slides { flex: 1; overflow-y: auto; padding: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr)); gap: 14px; align-content: start; }
+.pv-slide { margin: 0; }
+.pv-slide figcaption { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.pv-frame { position: relative; overflow: hidden; border: 1px solid var(--line); background: #fff; }
+.pv-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; color: #000; }
+.pv-shape { position: absolute; display: flex; flex-direction: column; }
+.pv-shape img { position: absolute; max-width: none; }
+.pv-text { min-width: 100%; overflow-wrap: break-word; }
+.pv-table { position: absolute; display: grid; }
+.pv-cell { display: flex; flex-direction: column; min-width: 0; background-size: 100% 100%; }
 @media (prefers-reduced-motion: no-preference) { .chip, .teams button { transition: background .12s, color .12s; } }
 </style>
 
@@ -202,13 +220,14 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
         <button class="btn" id="export-csv">Export CSV</button>
         <button class="btn" id="export-pdf" hidden>Export PDF</button>
       </div></details>
+      <button class="btn" id="preview-pptx" hidden>Preview slides</button>
       <button class="btn primary" id="export-pptx" hidden>Build PowerPoint</button>
       <label class="opt" id="only-players-opt" hidden><input type="checkbox" id="only-players"> player slides only</label>
       <button class="btn" id="sign-out" hidden>Sign out</button>
     </div>
     <div class="panel" id="tagmgr" hidden>
       <h3>Tags</h3>
-      <p>Rename a tag in place (every player keeps it), or remove one with ×. Changes save as you type.</p>
+      <p>Rename a tag in place (every player keeps it), or remove one with ×. Changes save as you type. A new tag can also be typed straight on a player's Tags row.</p>
       <div class="taglist" id="taglist"></div>
       <form class="addtag" id="addtag"><input id="newtag" placeholder="New tag, e.g. lob threat" aria-label="New tag"><button class="btn primary" type="submit">Add</button></form>
       <h3 style="margin-top:14px">To do</h3>
@@ -231,6 +250,15 @@ h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spac
     <button class="btn primary" type="submit">Sign in</button>
     <p id="signin-msg" role="status"></p>
   </form>
+</dialog>
+<dialog class="preview" id="preview" aria-labelledby="preview-title">
+  <div class="preview-bar">
+    <h3 id="preview-title">Preview</h3>
+    <span class="status">Drawn by the browser: line breaks and spacing can differ a little in PowerPoint.</span>
+    <button class="btn primary" id="preview-save">Download PowerPoint</button>
+    <button class="btn" id="preview-close">Close</button>
+  </div>
+  <div class="preview-slides" id="preview-slides"></div>
 </dialog>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -410,7 +438,7 @@ const MARKERS = [["target", "🎯", "target"]];   // earlier key/hot markers sta
 const rec = (p) => { const s = saved[p.id] || {}; const r = { ...EMPTY(), role: p.role || "", ...s }; if (!s.markers) r.markers = s.marker ? [s.marker] : [s.key && "key", s.hot && "hot"].filter(Boolean); return r; };
 const teamById = (id) => ROSTERS.find(t => t.id === id);
 const tagList = () => tags || DEFAULT_TAGS, todoList = () => todos || DEFAULT_TODOS;
-const touched = (r) => !!(r && (r.hand || (r.tags || []).length || (r.todos || []).length || r.note || ISO_TEXT[r.iso]));
+const touched = (r) => !!(r && (r.hand || (r.tags || []).length || (r.bullets || []).length || (r.todos || []).length || r.note || ISO_TEXT[r.iso]));
 const statVal = (p, k) => { const s = p.stats; if (!s || s[k] == null) return ""; const lbl = STATS.find(x => x[0] === k)?.[1] || k.toUpperCase(); return lbl.endsWith("%") ? `${s[k]}% ${lbl.slice(0, -1)}` : `${s[k]} ${lbl}`; };
 const heightText = (cm) => { if (!cm) return ""; const inch = Math.round(Number(cm) / 2.54); return `${cm} - ${Math.floor(inch / 12)}’${inch % 12}’’`; };
 const handText = (h) => ({ L: "Left", R: "Right", "?": "?" })[h] || "";
@@ -499,6 +527,14 @@ function orderedList(items, onChange, hint) {
   return wrap;
 }
 
+// a small text box on a player's row: Enter adds what was typed, and the rebuilt card gets the cursor back
+function addBox(id, placeholder, onAdd) {
+  return el("input", { class: "addbox", type: "text", id, placeholder, "aria-label": placeholder, onkeydown: (e) => {
+    const typed = e.target.value.trim(); if (e.key !== "Enter" || !typed) return;
+    onAdd(typed); const again = document.getElementById(id); if (again) again.focus();
+  } });
+}
+
 function playerCard(p) {
   const r = rec(p), roles = r.role ? r.role.split("/") : [];
   const card = el("div", { class: "player" + (saved[p.id] ? " touched" : "") + (r.exclude ? " excluded" : ""), id: "p-" + p.id });
@@ -523,21 +559,26 @@ function playerCard(p) {
   for (const [h, label] of HANDS) handGroup.append(el("button", { class: "chip hand", title: label, "aria-pressed": String(r.hand === h), onclick: () => save(p, { hand: r.hand === h ? "" : h }) }, h));
   card.append(el("div", { class: "controls" }, roleGroup, handGroup));
 
-  // Tags: click to toggle; ★ on a selected tag puts it among the three slide bullets
+  // Tags: click to toggle; ★ on a selected tag puts it among the three slide bullets. A tag or to-do typed in the
+  // row's box joins the shared list and this player; a typed bullet is this player's alone.
+  const addBullet = (text) => { if (r.bullets.includes(text)) return; if (r.bullets.length < 3) save(p, { bullets: [...r.bullets, text] }); else setStatus("Three bullets already chosen: remove one first"); };
+  const addTodo = (text) => { if (r.todos.length < 3) save(p, { todos: [...r.todos, text] }); else setStatus("Three to-dos already chosen: remove one first"); };
   const tagBox = el("div", { class: "tags" }, el("span", { class: "lbl" }, "Tags"));
   const toggleTag = (tg) => { const on = r.tags.includes(tg); save(p, { tags: on ? r.tags.filter(x => x !== tg) : [...r.tags, tg], bullets: on ? r.bullets.filter(x => x !== tg) : r.bullets }); };
   const allTags = [...tagList(), ...r.tags.filter(tg => !tagList().includes(tg))];
   for (const tg of allTags) {
     const on = r.tags.includes(tg), isB = r.bullets.includes(tg);
     tagBox.append(el("button", { class: "chip", "aria-pressed": String(on), onclick: () => toggleTag(tg) }, tg));
-    if (on) tagBox.append(el("button", { class: "chip star", "aria-pressed": String(isB), title: isB ? "Remove from slide bullets" : "Use as a slide bullet (max 3)", onclick: () => { if (isB) save(p, { bullets: r.bullets.filter(x => x !== tg) }); else if (r.bullets.length < 3) save(p, { bullets: [...r.bullets, tg] }); else setStatus("Three bullets already chosen: remove one first"); } }, isB ? "★" : "☆"));
+    if (on) tagBox.append(el("button", { class: "chip star", "aria-pressed": String(isB), title: isB ? "Remove from slide bullets" : "Use as a slide bullet (max 3)", onclick: () => isB ? save(p, { bullets: r.bullets.filter(x => x !== tg) }) : addBullet(tg) }, isB ? "★" : "☆"));
   }
+  tagBox.append(addBox("newtag-" + p.id, "+ new tag", (text) => { if (!tagList().includes(text)) saveList("tags", [...tagList(), text]); if (!r.tags.includes(text)) save(p, { tags: [...r.tags, text] }); }));
   card.append(tagBox);
-  card.append(el("div", { class: "tags" }, el("span", { class: "lbl" }, "Bullets"), orderedList(r.bullets, (a) => save(p, { bullets: a }), "none: press ☆ on a tag")));
+  card.append(el("div", { class: "tags" }, el("span", { class: "lbl" }, "Bullets"), orderedList(r.bullets, (a) => save(p, { bullets: a }), "none: press ☆ on a tag, or type one"), addBox("newbullet-" + p.id, "+ write a bullet", addBullet)));
 
   const todoBox = el("div", { class: "tags" }, el("span", { class: "lbl" }, "To do"));
   const allTodos = [...todoList(), ...r.todos.filter(x => !todoList().includes(x))];
-  for (const td of allTodos) todoBox.append(el("button", { class: "chip todo", "aria-pressed": String(r.todos.includes(td)), onclick: () => { if (r.todos.includes(td)) save(p, { todos: r.todos.filter(x => x !== td) }); else if (r.todos.length < 3) save(p, { todos: [...r.todos, td] }); else setStatus("Three to-dos already chosen: remove one first"); } }, td));
+  for (const td of allTodos) todoBox.append(el("button", { class: "chip todo", "aria-pressed": String(r.todos.includes(td)), onclick: () => r.todos.includes(td) ? save(p, { todos: r.todos.filter(x => x !== td) }) : addTodo(td) }, td));
+  todoBox.append(addBox("newtodo-" + p.id, "+ new to-do", (text) => { if (r.todos.includes(text)) return; if (r.todos.length < 3 && !todoList().includes(text)) saveList("todos", [...todoList(), text]); addTodo(text); }));
   card.append(todoBox);
   if (r.todos.length) card.append(el("div", { class: "tags" }, el("span", { class: "lbl" }, "Order"), orderedList(r.todos, (a) => save(p, { todos: a }), "")));
 
@@ -682,18 +723,32 @@ async function imageData(url) {
 }
 const photoData = (id) => PHOTO_IDS.has(id) ? imageData("photos/" + id + ".jpg") : null;
 // PowerPoint head shot: a top-centred box [share of the photo's width, height / width], starting 2% from the top.
-// Players get a 4:5 box on the face; referees keep their shoulders, as in the reference deck.
+// Players get a 2:3 box down to the chest; referees keep their shoulders, as in the reference deck.
 // Square images (club logos standing in for a photo) are kept whole.
-const HEAD_TOP = 0.02, PLAYER_HEAD = [0.55, 1.25], REF_HEAD = [0.83, 0.93];
+const HEAD_TOP = 0.02, PLAYER_HEAD = [0.75, 1.5], REF_HEAD = [0.83, 0.93];
+// a part of an image redrawn sw x sh, or centred on a wider transparent canvas (then a PNG): {data, w, h, ext}
+async function cutImage(ph, sx, sy, sw, sh, cw = sw) {
+  const canvas = new OffscreenCanvas(cw, sh), ext = cw > sw ? "png" : "jpeg";
+  canvas.getContext("2d").drawImage(await createImageBitmap(new Blob([ph.data])), sx, sy, sw, sh, Math.round((cw - sw) / 2), 0, sw, sh);
+  const blob = await canvas.convertToBlob({ type: "image/" + ext, quality: 0.92 });
+  return { data: new Uint8Array(await blob.arrayBuffer()), w: cw, h: sh, ext };
+}
 async function headCrop(ph, [widthShare, aspect]) {
   if (!ph || ph.h < ph.w * 1.1) return ph;
-  const cw = Math.round(ph.w * widthShare), ch = Math.min(Math.round(cw * aspect), ph.h);
-  const canvas = new OffscreenCanvas(cw, ch);
-  canvas.getContext("2d").drawImage(await createImageBitmap(new Blob([ph.data])), Math.round((ph.w - cw) / 2), Math.round(ph.h * HEAD_TOP), cw, ch, 0, 0, cw, ch);
-  const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.92 });
-  return { data: new Uint8Array(await blob.arrayBuffer()), w: cw, h: ch };
+  const top = Math.round(ph.h * HEAD_TOP), cw = Math.round(ph.w * widthShare);
+  return cutImage(ph, Math.round((ph.w - cw) / 2), top, cw, Math.min(Math.round(cw * aspect), ph.h - top));
 }
 const headshotData = async (id) => headCrop(await photoData(id), PLAYER_HEAD);
+// Roster slide photo: a table cell stretches its picture, so the photo is cut to the cell's own shape, around the
+// player slide's share of its width. A cell wider than 5:4 would leave a strip of the face: the cut keeps the
+// height of a 5:4 one and widens to the photo's edges, then to transparent margins.
+const ROSTER_MAX_ASPECT = 1.25;
+async function cellPhoto(ph, cellW, cellH) {
+  if (!ph) return null;
+  const top = Math.round(ph.h * HEAD_TOP), base = Math.round(ph.w * PLAYER_HEAD[0]), ch = Math.min(ph.h - top, Math.round(base / Math.min(cellW / cellH, ROSTER_MAX_ASPECT)));
+  const cw = Math.max(base, Math.round(ch * cellW / cellH)), sw = Math.min(ph.w, cw);
+  return cutImage(ph, Math.round((ph.w - sw) / 2), top, sw, ch, cw);
+}
 async function buildPdf(t) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -832,7 +887,8 @@ async function loadTemplate() {
   return store.templateIsB64() ? b64ToBytes(await res.text()) : new Uint8Array(await res.arrayBuffer());
 }
 
-async function buildPptx(t, onlyPlayers, progress) {
+// the deck as a JSZip package: drawn by the preview, written out as the .pptx
+async function buildDeck(t, onlyPlayers, progress) {
   const zip = await JSZip.loadAsync(await loadTemplate());
   const slidePaths = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f));
   let tplPath = null, tplXml = null;
@@ -883,7 +939,7 @@ async function buildPptx(t, onlyPlayers, progress) {
         zip.file(media, ph.data);
         const rid = "rIdPhoto";
         srels = srels.replace("</Relationships>", `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${media.split("/").pop()}"/></Relationships>`);
-        const bx = 284750, by = 1250000, bw = 2309403, bh = 3750000, sc = Math.min(bw / ph.w, bh / ph.h), cw = Math.round(ph.w * sc), chh = Math.round(ph.h * sc);
+        const bx = 284750, by = 1500000, bw = 2309403, bh = 3500000, sc = Math.min(bw / ph.w, bh / ph.h), cw = Math.round(ph.w * sc), chh = Math.round(ph.h * sc);
         picXml = `<p:pic><p:nvPicPr><p:cNvPr id="900" name="Photo ${xesc(p.name)}" descr="${xesc(p.name)}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="${bx + Math.round((bw - cw) / 2)}" y="${by}"/><a:ext cx="${cw}" cy="${chh}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
       }
       xml = xml.slice(0, pb[0]) + picXml + xml.slice(pb[1]);
@@ -935,8 +991,13 @@ async function buildPptx(t, onlyPlayers, progress) {
     for (const f of Object.keys(zip.files)) if (!zip.files[f].dir && f.startsWith("ppt/media/") && !refs.has(f.split("/").pop())) zip.remove(f);
   }
   zip.file("ppt/presentation.xml", pres); zip.file("ppt/_rels/presentation.xml.rels", presRels); zip.file("[Content_Types].xml", ct);
-  return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation", compression: "DEFLATE" });
+  return zip;
 }
+async function saveDeck(zip, t) {
+  await store.saveFile(`scouting_${fileStem(t)}.pptx`, await zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation", compression: "DEFLATE" }));
+  setStatus("PowerPoint saved");
+}
+const pptxError = (err) => setStatus(err && err.code === "declined" ? "PowerPoint not saved" : "PowerPoint failed: " + (err && (err.code || err.message)));
 // ---- the team slides: cover (team + "GAME #n"), roster by position, season stats table ----
 const rowsOf = (tbl) => [...tbl.matchAll(/<a:tr h="(\d+)">([\s\S]*?)<\/a:tr>/g)];
 const cellsOf = (row) => [...row.matchAll(/<a:tc(?: [^>]*)?>[\s\S]*?<\/a:tc>/g)].map(m => m[0]);
@@ -962,12 +1023,14 @@ function setBulletBoxes(x, boxes) {
   let n = 0;
   return x.replace(/<p:sp>[\s\S]*?<\/p:sp>/g, (sp) => sp.includes("<a:buChar") && boxes[n] ? setBullets(sp, boxes[n++]) : sp);
 }
-// a long surname is set smaller instead of wrapping: the cell's run size scales down past `fit` characters
-function fitCellText(c, text, fit) {
-  const out = setCellText(c, text);
-  if (text.length <= fit) return out;
-  return out.replace(/(<a:r><a:rPr[^>]*?)sz="(\d+)"/, (m, pre, sz) => `${pre}sz="${Math.max(1200, Math.floor(Number(sz) * fit / text.length))}"`);
-}
+// a long text is set smaller instead of wrapping: the first run's size scales down past `fit` characters
+const fitRun = (xml, text, fit) => text.length <= fit ? xml : xml.replace(/(<a:r><a:rPr[^>]*?)sz="(\d+)"/, (m, pre, sz) => `${pre}sz="${Math.max(1200, Math.floor(Number(sz) * fit / text.length))}"`);
+const fitCellText = (c, text, fit) => fitRun(setCellText(c, text), text, fit);
+// The roster and stats slides' title (the team name) stays on one line whatever its length: no wrapping, set
+// smaller past TITLE_FIT characters, and anchored to the bottom so it keeps the template's baseline.
+const TITLE_FIT = 9;
+const oneLineTitle = (x, name) => x.replace(/<p:sp>[\s\S]*?<\/p:sp>/g, (sp) => cellText(sp) !== xesc(name) ? sp
+  : fitRun(sp.replace(/<a:bodyPr\b([^>]*?)(\/?>)/, (m, attrs, end) => `<a:bodyPr wrap="none" anchor="b"${attrs.replace(/ (wrap|anchor)="[^"]*"/g, "")}${end}`), name, TITLE_FIT));
 const stripRowIds = (row) => row.replace(/<a:extLst>[\s\S]*?<\/a:extLst>/g, "");
 const makeRow = (h, cells) => `<a:tr h="${h}">${cells.join("")}</a:tr>`;
 const pct = (m, a) => a ? `${Math.round(100 * m / a)}%` : "-";
@@ -1037,22 +1100,24 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
           const cols = rosterColumns(t), order = ROLES, depth = Math.max(3, ...order.map(k => cols[k].length));
           const header = rows[0][0];
           // starters' photos
-          let photoRow = rows[1][0]; const pcells = cellsOf(rows[1][2]); let pr = 0;
-          const newCells = [];
-          for (let ci = 0, col = 0; ci < pcells.length; ci++) {
-            let c = pcells[ci];
-            if (/<a:blipFill/.test(c)) {
-              const p = cols[order[col++]][0], ph = p ? await headshotData(p.id) : null;
-              if (ph) { const media = `ppt/media/roster_${p.id.replace(/[^\w]/g, "_")}.jpeg`; zip.file(media, ph.data); const rid = "rIdRoster" + (pr++); rels = rels.replace("</Relationships>", `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${media.split("/").pop()}"/></Relationships>`); c = c.replace(/r:embed="rId\d+"/, `r:embed="${rid}"`); }
-              else c = c.replace(/<a:blipFill[\s\S]*?<\/a:blipFill>/, "<a:noFill/>");
-            }
-            newCells.push(c);
-          }
           // deeper benches: the photo row gives up height so the table still ends above the slide's bottom edge
           const frameY = Number((x.match(/<p:xfrm><a:off x="-?\d+" y="(-?\d+)"\/>/) || [, 1764824])[1]);
           const avail = 6858000 - 150000 - frameY - Number(rows[0][1]) - Number(rows[2][1]) - (depth - 1) * Number(rows[3][1]);
           const photoH = Math.max(900000, Math.min(Number(rows[1][1]), avail));
-          photoRow = makeRow(photoH, newCells);
+          const gridW = [...tbl.matchAll(/<a:gridCol w="(\d+)"/g)].map(m => Number(m[1]));
+          const pcells = cellsOf(rows[1][2]); let pr = 0;
+          const newCells = [];
+          for (let ci = 0, col = 0; ci < pcells.length; ci++) {
+            let c = pcells[ci];
+            if (/<a:blipFill/.test(c)) {
+              const span = Number((c.match(/gridSpan="(\d+)"/) || [, 1])[1]), cellW = gridW.slice(ci, ci + span).reduce((a, b) => a + b, 0);
+              const p = cols[order[col++]][0], ph = p ? await cellPhoto(await photoData(p.id), cellW, photoH) : null;
+              if (ph) { const media = `ppt/media/roster_${p.id.replace(/[^\w]/g, "_")}.${ph.ext}`; zip.file(media, ph.data); const rid = "rIdRoster" + (pr++); rels = rels.replace("</Relationships>", `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${media.split("/").pop()}"/></Relationships>`); c = c.replace(/r:embed="rId\d+"/, `r:embed="${rid}"`); }
+              else c = c.replace(/<a:blipFill[\s\S]*?<\/a:blipFill>/, "<a:noFill/>");
+            }
+            newCells.push(c);
+          }
+          const photoRow = makeRow(photoH, newCells);
           const starterCells = cellsOf(rows[2][2]), benchCells = cellsOf(rows[3][2]);
           const dataRows = [];
           for (let d = 0; d < depth; d++) {
@@ -1064,7 +1129,7 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
           x = x.slice(0, ti) + grid + header + photoRow + dataRows.join("") + "</a:tbl>" + x.slice(te); changed = true;
           // the frame's declared height follows the rows
           const total = [rows[0][1], photoH, rows[2][1], ...Array(depth - 1).fill(rows[3][1])].reduce((s, h) => s + Number(h), 0);
-          x = x.replace(/(name="[^"]*"[\s\S]*?<p:xfrm>[\s\S]*?<a:ext cx="\d+" cy=")\d+(")/, `$1${total}$2`);
+          x = oneLineTitle(x.replace(/(name="[^"]*"[\s\S]*?<p:xfrm>[\s\S]*?<a:ext cx="\d+" cy=")\d+(")/, `$1${total}$2`), short);
         }
       }
     }
@@ -1083,7 +1148,7 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
         const grid = tbl.slice(0, tbl.indexOf("<a:tr "));
         x = x.slice(0, ti) + grid + rows[0][0] + dataRows.join("") + "</a:tbl>" + x.slice(te); changed = true;
         const total = Number(rows[0][1]) + players.length * Number(rows[1][1]);
-        x = x.replace(/(name="[^"]*"[\s\S]*?<p:xfrm>[\s\S]*?<a:ext cx="\d+" cy=")\d+(")/, `$1${total}$2`);
+        x = oneLineTitle(x.replace(/(name="[^"]*"[\s\S]*?<p:xfrm>[\s\S]*?<a:ext cx="\d+" cy=")\d+(")/, `$1${total}$2`), short);
       }
     }
     if (changed) { zip.file(f, x); zip.file(relsOf(f), rels); }
@@ -1092,11 +1157,163 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
 $("#export-pptx").addEventListener("click", async (e) => {
   const t = teamById(current); if (!t) return;
   const btn = e.currentTarget; btn.disabled = true;
-  try {
-    const blob = await buildPptx(t, $("#only-players").checked, (m) => btn.textContent = m);
-    await store.saveFile(`scouting_${fileStem(t)}.pptx`, blob); setStatus("PowerPoint saved");
-  } catch (err) { setStatus(err && err.code === "declined" ? "PowerPoint not saved" : "PowerPoint failed: " + (err && (err.code || err.message))); }
+  try { await saveDeck(await buildDeck(t, $("#only-players").checked, (m) => btn.textContent = m), t); } catch (err) { pptxError(err); }
   btn.disabled = false; btn.textContent = "Build PowerPoint";
+});
+
+// ---- preview: the built deck drawn as HTML, slide by slide, at 1 px per point and then scaled to the dialog.
+// It covers what the template uses (solid backgrounds, text boxes, pictures, tables); no effects, no groups. ----
+const EMU = 12700, PREVIEW_MAX_PX = 1600;
+// The template's crest art is tens of thousands of pixels wide: the preview draws a smaller copy, made once
+// (it takes seconds) and kept for the next previews, by path and size in the package.
+const smallCopies = new Map();
+const pngWidth = async (blob) => { const head = new DataView(await blob.slice(0, 24).arrayBuffer()); return head.byteLength === 24 && head.getUint32(0) === 0x89504E47 ? head.getUint32(16) : 0; };
+async function smallCopy(blob) {
+  const bmp = await createImageBitmap(blob, { resizeWidth: PREVIEW_MAX_PX, resizeQuality: "medium" }), canvas = new OffscreenCanvas(bmp.width, bmp.height);
+  canvas.getContext("2d").drawImage(bmp, 0, 0); bmp.close();
+  return URL.createObjectURL(await canvas.convertToBlob());
+}
+const kids = (n, name) => n ? [...n.children].filter(c => c.localName === name) : [];
+const kid = (n, name) => kids(n, name)[0] || null;
+const pick = (sources, read) => { for (const s of sources) { const v = s && read(s); if (v) return v; } return ""; };
+const SCHEME = { bg1: "#FFFFFF", lt1: "#FFFFFF", tx1: "#000000", dk1: "#000000" };
+const hexOf = (n) => { const fill = kid(n, "solidFill"), rgb = kid(fill, "srgbClr"), scheme = kid(fill, "schemeClr"); return rgb ? "#" + rgb.getAttribute("val") : scheme ? SCHEME[scheme.getAttribute("val")] || "" : ""; };
+// the deck's fonts are used when installed on this computer; else something of the same kind
+const fontStack = (face) => `"${face}", ${/tusker|nastro/i.test(face) ? '"Barlow Condensed", ' : ""}${/signature|roundhand|script/i.test(face) ? "cursive" : "sans-serif"}`;
+const ANCHOR = { ctr: "center", b: "flex-end" }, ALIGN = { ctr: "center", r: "right", just: "justify" };
+function place(node, xfrm) {
+  const off = kid(xfrm, "off"), ext = kid(xfrm, "ext"); if (!off || !ext) return null;
+  Object.assign(node.style, { left: off.getAttribute("x") / EMU + "px", top: off.getAttribute("y") / EMU + "px", width: ext.getAttribute("cx") / EMU + "px", height: ext.getAttribute("cy") / EMU + "px" });
+  if (xfrm.getAttribute("rot")) node.style.transform = `rotate(${xfrm.getAttribute("rot") / 60000}deg)`;
+  return node;
+}
+// a text frame's vertical anchor and its insets [top, right, bottom, left], read from its properties
+function frame(node, pr, insets) {
+  node.style.justifyContent = ANCHOR[pr && pr.getAttribute("anchor")] || "flex-start";
+  node.style.padding = insets.map((name, i) => ((pr && pr.getAttribute(name)) ?? (i % 2 ? 91440 : 45720)) / EMU + "px").join(" ");
+}
+// a text body as a block of lines; `inherited` are the paragraph properties it falls back on, nearest first
+function textBlock(txBody, inherited) {
+  const block = el("div", { class: "pv-text" }), bodyPr = kid(txBody, "bodyPr"), nowrap = !!bodyPr && bodyPr.getAttribute("wrap") === "none";
+  block.style.whiteSpace = nowrap ? "pre" : "pre-wrap";
+  kids(txBody, "p").forEach((p, i) => {
+    const pPr = kid(p, "pPr"), levels = [pPr, kid(kid(txBody, "lstStyle"), "lvl1pPr"), ...inherited], line = el("div");
+    const style = (node, rPr) => {
+      const from = [rPr, ...levels.map(l => kid(l, "defRPr"))], attr = (name) => pick(from, s => s.getAttribute(name));
+      const face = pick(from, s => { const latin = kid(s, "latin"), f = latin && latin.getAttribute("typeface"); return f && !f.startsWith("+") && f; });
+      Object.assign(node.style, { fontSize: (attr("sz") || 1800) / 100 + "px", color: pick(from, hexOf) || "#000", fontWeight: attr("b") === "1" ? "700" : "400", fontStyle: attr("i") === "1" ? "italic" : "normal", fontVariantCaps: attr("cap") === "small" ? "small-caps" : "normal", fontFamily: face ? fontStack(face) : "Calibri, sans-serif" });
+      const shift = Number(rPr && rPr.getAttribute("baseline")) || 0;   // super- or subscript: two thirds the size, moved
+      if (shift) Object.assign(node.style, { fontSize: (attr("sz") || 1800) / 150 + "px", verticalAlign: shift / 66667 + "em" });
+      return node;
+    };
+    const align = pick(levels, l => l.getAttribute("algn"));
+    line.style.textAlign = ALIGN[align] || "left";
+    line.style.lineHeight = String(1.2 * (pick(levels, l => { const pct = kid(kid(l, "lnSpc"), "spcPct"); return pct && pct.getAttribute("val"); }) || 100000) / 100000);
+    if (nowrap && !i) block.style.alignSelf = { ctr: "center", r: "flex-end" }[align] || "flex-start";
+    const runs = [...p.children].filter(c => c.localName === "r" || c.localName === "br"), bullet = kid(pPr, "buChar");
+    if (bullet && runs.length) {
+      const hang = -(pPr.getAttribute("indent") || 0) / EMU, dot = style(el("span", {}, bullet.getAttribute("char")), kid(runs[0], "rPr"));
+      line.style.paddingLeft = (pPr.getAttribute("marL") || 0) / EMU + "px";
+      Object.assign(dot.style, { display: "inline-block", width: hang + "px", marginLeft: -hang + "px" });
+      line.append(dot);
+    }
+    for (const r of runs) line.append(r.localName === "br" ? el("br") : style(el("span", {}, (kid(r, "t") || {}).textContent || ""), kid(r, "rPr")));
+    if (!runs.length) line.append(style(el("span", {}, "\u00a0"), kid(p, "endParaRPr")));
+    block.append(line);
+  });
+  return block;
+}
+// draws every slide of the deck into box; resolves with the function that clears the preview again
+async function renderDeck(zip, box, progress) {
+  const parts = new Map(), urls = new Map();
+  // a part of the package: its XML and its relationships by id, each target as a path in the zip
+  const part = (path) => {
+    if (!parts.has(path)) parts.set(path, (async () => {
+      const relFile = zip.file(path.replace(/([^/]+)$/, "_rels/$1.rels")), rels = {};
+      for (const a of relFile ? relAttrs(await relFile.async("string")) : []) rels[a.Id] = { type: a.Type.split("/").pop(), path: new URL(a.Target, "http://zip/" + path).pathname.slice(1) };
+      return { xml: new DOMParser().parseFromString(await zip.file(path).async("string"), "application/xml").documentElement, rels };
+    })());
+    return parts.get(path);
+  };
+  // a picture of the deck as an object URL ("" when it cannot be drawn)
+  const image = (path) => {
+    if (!urls.has(path)) urls.set(path, (async () => {
+      const blob = await zip.file(path).async("blob"), key = `${path}:${blob.size}`;
+      if (await pngWidth(blob) <= PREVIEW_MAX_PX) return URL.createObjectURL(blob);
+      if (!smallCopies.has(key)) smallCopies.set(key, await smallCopy(blob));
+      return smallCopies.get(key);
+    })().catch(e => { console.warn("picture not drawn", path, e); return ""; }));
+    return urls.get(path);
+  };
+  const linked = (p, type) => part(Object.values(p.rels).find(r => r.type === type).path);
+  const pres = await part("ppt/presentation.xml"), size = kid(pres.xml, "sldSz"), W = size.getAttribute("cx") / EMU, H = size.getAttribute("cy") / EMU;
+  const textDefaults = ["lvl1pPr", "defPPr"].map(name => kid(kid(pres.xml, "defaultTextStyle"), name));
+  // the shapes of a slide, or the fixed ones (no placeholders) of its layout or master
+  const draw = async (stage, { xml, rels }, fixedOnly) => {
+    for (const n of kid(kid(xml, "cSld"), "spTree").children) {
+      if (fixedOnly && n.getElementsByTagName("p:ph").length) continue;
+      if (n.localName === "sp") {
+        const pr = kid(n, "spPr"), body = kid(n, "txBody"), shape = place(el("div", { class: "pv-shape" }), kid(pr, "xfrm")); if (!shape) continue;
+        shape.style.background = hexOf(pr) || "none";
+        if (body) { frame(shape, kid(body, "bodyPr"), ["tIns", "rIns", "bIns", "lIns"]); shape.append(textBlock(body, textDefaults)); }
+        stage.append(shape);
+      } else if (n.localName === "pic") {
+        const blip = n.getElementsByTagName("a:blip")[0], src = blip && rels[blip.getAttribute("r:embed")], url = src && await image(src.path);
+        const shape = url && place(el("div", { class: "pv-shape" }), kid(kid(n, "spPr"), "xfrm")); if (!shape) continue;
+        const crop = n.getElementsByTagName("a:srcRect")[0], cut = (side) => ((crop && crop.getAttribute(side)) || 0) / 100000, w = 1 - cut("l") - cut("r"), h = 1 - cut("t") - cut("b");
+        const img = el("img", { src: url, alt: "" }), alpha = kid(blip, "alphaModFix");
+        Object.assign(img.style, { opacity: alpha ? alpha.getAttribute("amt") / 100000 : 1, left: -100 * cut("l") / w + "%", top: -100 * cut("t") / h + "%", width: 100 / w + "%", height: 100 / h + "%" });
+        shape.style.overflow = "hidden"; shape.append(img); stage.append(shape);
+      } else if (n.localName === "graphicFrame") {
+        const tbl = n.getElementsByTagName("a:tbl")[0], grid = tbl && place(el("div", { class: "pv-table" }), kid(n, "xfrm")); if (!grid) continue;
+        const rows = kids(tbl, "tr");
+        grid.style.height = "";   // the rows give the height, and grow with their text as in PowerPoint
+        grid.style.gridTemplateColumns = kids(kid(tbl, "tblGrid"), "gridCol").map(c => c.getAttribute("w") / EMU + "px").join(" ");
+        grid.style.gridTemplateRows = rows.map(r => `minmax(${r.getAttribute("h") / EMU}px, auto)`).join(" ");
+        for (const [ri, tr] of rows.entries()) for (const [ci, tc] of kids(tr, "tc").entries()) {
+          if (tc.getAttribute("hMerge") || tc.getAttribute("vMerge")) continue;
+          const pr = kid(tc, "tcPr"), cell = el("div", { class: "pv-cell" }), blip = pr && pr.getElementsByTagName("a:blip")[0], src = blip && rels[blip.getAttribute("r:embed")];
+          cell.style.gridArea = `${ri + 1} / ${ci + 1} / span ${tc.getAttribute("rowSpan") || 1} / span ${tc.getAttribute("gridSpan") || 1}`;
+          frame(cell, pr, ["marT", "marR", "marB", "marL"]);
+          if (src) cell.style.backgroundImage = `url(${await image(src.path)})`; else cell.style.backgroundColor = hexOf(pr) || "transparent";
+          for (const side of ["Left", "Right", "Top", "Bottom"]) { const ln = kid(pr, "ln" + side[0]), hex = hexOf(ln); if (hex && ln.getAttribute("w") !== "0") cell.style["border" + side] = `${(ln.getAttribute("w") || 12700) / EMU}px solid ${hex}`; }
+          cell.append(textBlock(kid(tc, "txBody"), [])); grid.append(cell);
+        }
+        stage.append(grid);
+      }
+    }
+  };
+  const ids = kids(kid(pres.xml, "sldIdLst"), "sldId");
+  for (const [i, id] of ids.entries()) {
+    progress(`Drawing slide ${i + 1} of ${ids.length}…`);
+    const slide = await part(pres.rels[id.getAttribute("r:id")].path), layout = await linked(slide, "slideLayout"), master = await linked(layout, "slideMaster");
+    const stage = el("div", { class: "pv-stage", style: `width:${W}px;height:${H}px` });
+    stage.style.background = pick([slide, layout, master], s => hexOf(kid(kid(kid(s.xml, "cSld"), "bg"), "bgPr"))) || "#fff";
+    if (layout.xml.getAttribute("showMasterSp") !== "0") await draw(stage, master, true);
+    await draw(stage, layout, true); await draw(stage, slide, false);
+    box.append(el("figure", { class: "pv-slide" }, el("figcaption", {}, `Slide ${i + 1}`), el("div", { class: "pv-frame", style: `aspect-ratio:${W}/${H}` }, stage)));
+  }
+  const sizer = new ResizeObserver(() => { for (const f of box.querySelectorAll(".pv-frame")) f.firstChild.style.transform = `scale(${f.clientWidth / W})`; });
+  sizer.observe(box);
+  const kept = new Set(smallCopies.values());
+  return () => { sizer.disconnect(); box.replaceChildren(); for (const url of urls.values()) url.then(u => u && !kept.has(u) && URL.revokeObjectURL(u)); };
+}
+let preview = null;   // the deck on show: {zip, team, clear}
+$("#preview-pptx").addEventListener("click", async (e) => {
+  const t = teamById(current); if (!t) return;
+  const btn = e.currentTarget, box = $("#preview-slides"); btn.disabled = true;
+  try {
+    const progress = (m) => btn.textContent = m, zip = await buildDeck(t, $("#only-players").checked, progress);
+    preview = { zip, team: t, clear: await renderDeck(zip, box, progress) };
+    $("#preview-title").textContent = `${shortName(t)} · preview`; $("#preview").showModal();
+  } catch (err) { box.replaceChildren(); setStatus("Preview failed: " + (err && (err.code || err.message))); }
+  btn.disabled = false; btn.textContent = "Preview slides";
+});
+$("#preview").addEventListener("close", () => { preview.clear(); preview = null; });
+$("#preview-close").addEventListener("click", () => $("#preview").close());
+$("#preview-save").addEventListener("click", (e) => {
+  const btn = e.currentTarget; btn.disabled = true;
+  saveDeck(preview.zip, preview.team).catch(pptxError).finally(() => btn.disabled = false);
 });
 $("#tpl-upload").addEventListener("change", async (e) => {
   const f = e.target.files[0]; if (!f || !store.canUpload || !store.writable) return;
@@ -1138,7 +1355,7 @@ async function boot() {
   const firstUp = ROSTERS.find(nextGame); if (firstUp) select(firstUp.id);
   await store.detect();
   const dl = store.mode !== "artifact" || !!store.downloads;
-  if (dl) { $("#export-menu").hidden = false; if (window.jspdf) $("#export-pdf").hidden = false; if (window.JSZip) { $("#export-pptx").hidden = false; $("#only-players-opt").hidden = false; } }
+  if (dl) { $("#export-menu").hidden = false; if (window.jspdf) $("#export-pdf").hidden = false; if (window.JSZip) { $("#export-pptx").hidden = false; $("#preview-pptx").hidden = false; $("#only-players-opt").hidden = false; } }
   $("#tpl-upload-lbl").hidden = !store.canUpload; $("#logo-upload-lbl").hidden = !store.canUploadLogo;
   if (store.mode === "local" || store.user) { $("#export-state").hidden = false; $("#import-state-lbl").hidden = false; }
   if (store.mode === "local") setStatus("Browser-only mode: notes stay in this browser; export scouting.json to keep them");
