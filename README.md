@@ -6,7 +6,7 @@ scouting deck: the `{{name}}` slide of `template.pptx` repeated once per player,
 stats slides filled for the team.
 
 On a player's card a new tag or to-do can be typed straight on its row (Enter adds it to the shared list and
-to the player), and a slide bullet can be written freely, without a tag behind it. *Preview slides* builds
+to the player); the slide bullets are the tags marked with a star, up to three. *Preview slides* builds
 the deck and draws every slide in the page, with a *Download PowerPoint* button for that same deck; the
 drawing uses the deck's fonts when they are installed on the computer, so line breaks can differ a little
 from PowerPoint.

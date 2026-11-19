@@ -438,7 +438,7 @@ const MARKERS = [["target", "🎯", "target"]];   // earlier key/hot markers sta
 const rec = (p) => { const s = saved[p.id] || {}; const r = { ...EMPTY(), role: p.role || "", ...s }; if (!s.markers) r.markers = s.marker ? [s.marker] : [s.key && "key", s.hot && "hot"].filter(Boolean); return r; };
 const teamById = (id) => ROSTERS.find(t => t.id === id);
 const tagList = () => tags || DEFAULT_TAGS, todoList = () => todos || DEFAULT_TODOS;
-const touched = (r) => !!(r && (r.hand || (r.tags || []).length || (r.bullets || []).length || (r.todos || []).length || r.note || ISO_TEXT[r.iso]));
+const touched = (r) => !!(r && (r.hand || (r.tags || []).length || (r.todos || []).length || r.note || ISO_TEXT[r.iso]));
 const statVal = (p, k) => { const s = p.stats; if (!s || s[k] == null) return ""; const lbl = STATS.find(x => x[0] === k)?.[1] || k.toUpperCase(); return lbl.endsWith("%") ? `${s[k]}% ${lbl.slice(0, -1)}` : `${s[k]} ${lbl}`; };
 const heightText = (cm) => { if (!cm) return ""; const inch = Math.round(Number(cm) / 2.54); return `${cm} - ${Math.floor(inch / 12)}’${inch % 12}’’`; };
 const handText = (h) => ({ L: "Left", R: "Right", "?": "?" })[h] || "";
@@ -560,8 +560,8 @@ function playerCard(p) {
   card.append(el("div", { class: "controls" }, roleGroup, handGroup));
 
   // Tags: click to toggle; ★ on a selected tag puts it among the three slide bullets. A tag or to-do typed in the
-  // row's box joins the shared list and this player; a typed bullet is this player's alone.
-  const addBullet = (text) => { if (r.bullets.includes(text)) return; if (r.bullets.length < 3) save(p, { bullets: [...r.bullets, text] }); else setStatus("Three bullets already chosen: remove one first"); };
+  // row's box joins the shared list and this player.
+  const addBullet = (text) => { if (r.bullets.length < 3) save(p, { bullets: [...r.bullets, text] }); else setStatus("Three bullets already chosen: remove one first"); };
   const addTodo = (text) => { if (r.todos.length < 3) save(p, { todos: [...r.todos, text] }); else setStatus("Three to-dos already chosen: remove one first"); };
   const tagBox = el("div", { class: "tags" }, el("span", { class: "lbl" }, "Tags"));
   const toggleTag = (tg) => { const on = r.tags.includes(tg); save(p, { tags: on ? r.tags.filter(x => x !== tg) : [...r.tags, tg], bullets: on ? r.bullets.filter(x => x !== tg) : r.bullets }); };
@@ -573,7 +573,7 @@ function playerCard(p) {
   }
   tagBox.append(addBox("newtag-" + p.id, "+ new tag", (text) => { if (!tagList().includes(text)) saveList("tags", [...tagList(), text]); if (!r.tags.includes(text)) save(p, { tags: [...r.tags, text] }); }));
   card.append(tagBox);
-  card.append(el("div", { class: "tags" }, el("span", { class: "lbl" }, "Bullets"), orderedList(r.bullets, (a) => save(p, { bullets: a }), "none: press ☆ on a tag, or type one"), addBox("newbullet-" + p.id, "+ write a bullet", addBullet)));
+  if (r.bullets.length) card.append(el("div", { class: "tags" }, el("span", { class: "lbl" }, "Bullets"), orderedList(r.bullets, (a) => save(p, { bullets: a }), "")));
 
   const todoBox = el("div", { class: "tags" }, el("span", { class: "lbl" }, "To do"));
   const allTodos = [...todoList(), ...r.todos.filter(x => !todoList().includes(x))];
