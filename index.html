@@ -573,7 +573,7 @@ function playerCard(p) {
   }
   tagBox.append(addBox("newtag-" + p.id, "+ new tag", (text) => { if (!tagList().includes(text)) saveList("tags", [...tagList(), text]); if (!r.tags.includes(text)) save(p, { tags: [...r.tags, text] }); }));
   card.append(tagBox);
-  card.append(el("div", { class: "tags" }, el("span", { class: "lbl" }, "Bullets"), orderedList(r.bullets, (a) => save(p, { bullets: a }), "none: press ☆ on a tag")));
+  if (r.bullets.length) card.append(el("div", { class: "tags" }, el("span", { class: "lbl" }, "Bullets"), orderedList(r.bullets, (a) => save(p, { bullets: a }), "")));
 
   const todoBox = el("div", { class: "tags" }, el("span", { class: "lbl" }, "To do"));
   const allTodos = [...todoList(), ...r.todos.filter(x => !todoList().includes(x))];
