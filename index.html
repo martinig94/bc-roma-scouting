@@ -856,8 +856,18 @@ const targetRun = (text, face) => `<a:r><a:rPr lang="en-US" sz="4700" b="1" dirt
 const TARGET_SP = `<p:sp><p:nvSpPr><p:cNvPr id="901" name="Target"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="4572000" y="5969000"/><a:ext cx="4064000" cy="762000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="ctr"/>${targetRun("TARGET ", "Calibri")}${targetRun("🎯", "Segoe UI Emoji")}</a:p></p:txBody></p:sp>`;
 // a SURNAME as the script font wants it: Surname
 const titleCase = (s) => s.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, (c) => c.toUpperCase());
+// referees slide: the crew (photos, names, numbers) sits REF_DROP lower than the template draws it
+const REF_DROP = 381000;
 // referees slide: where a name goes (EMU from the top) when the referee has no photo, mid-way down the photo row
-const REF_NAME_Y = 2921000;
+const REF_NAME_Y = 2921000 + REF_DROP;
+// Keys to WIN slide: WIN sits WIN_DROP lower, and the shadow of "Keys to" takes the slide's background colour
+const WIN_DROP = 152400;
+// a shape moved down by dy EMU
+const dropShape = (shape, dy) => shape.replace(/(<a:off x="-?\d+" y=")(-?\d+)"/, (m, pre, y) => `${pre}${Number(y) + dy}"`);
+// player slide: the "#" before {{number}} goes to the number's top left, as a superscript set half as large again
+// (a superscript is drawn at two thirds of its size, so the sign keeps the size the template gives it)
+const raiseHash = (xml) => xml.replace(/<a:rPr\b([^>]*?)(\/?>)((?:(?!<a:rPr\b)[\s\S])*?<a:t>#<\/a:t><\/a:r><a:r>(?:(?!<\/a:r>)[\s\S])*?\{\{number\}\})/,
+  (m, attrs, end, rest) => `<a:rPr${attrs.replace(/ (sz|baseline)="[^"]*"/g, "")} sz="${Math.round(1.5 * ((attrs.match(/ sz="(\d+)"/) || [])[1] || 1800))}" baseline="25000"${end}${rest}`);
 // a picture pointed at another image, renamed, and fitted (aspect kept, centred) in box, or in its own frame
 function fitPic(pic, rid, name, img, box) {
   const own = pic.match(/<a:off x="(-?\d+)" y="(-?\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/);
@@ -894,7 +904,7 @@ async function buildDeck(t, onlyPlayers, progress) {
   let tplPath = null, tplXml = null;
   for (const f of slidePaths) { const x = await zip.file(f).async("string"); if (x.includes("{{name}}")) { tplPath = f; tplXml = x; break; } }
   if (!tplPath) throw new Error("no slide with {{name}} in the template");
-  tplXml = mergeSplitPlaceholders(tplXml).replace(/<p:timing>[\s\S]*?<\/p:timing>/, "");
+  tplXml = raiseHash(mergeSplitPlaceholders(tplXml).replace(/<p:timing>[\s\S]*?<\/p:timing>/, ""));
   const relsOf = (p) => p.replace(/(slides|slideLayouts|slideMasters)\/([^/]+\.xml)$/, "$1/_rels/$2.rels");
   const tplRels = await zip.file(relsOf(tplPath)).async("string");
   let pres = await zip.file("ppt/presentation.xml").async("string");
@@ -1045,7 +1055,7 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
   for (const [f, x] of Object.entries(docs)) if (/<a:t>PG<\/a:t>/.test(x) && /<a:t>Roster<\/a:t>/i.test(x)) { const m = [...x.matchAll(/<a:t>([^<]{2,40})<\/a:t>/g)].map(m => m[1]).find(s => !/^(roster|pg|sg|sf|pf|c)$/i.test(s) && !/^#/.test(s)); if (m) tplTeam = m.trim(); }
   for (const [f, x0] of Object.entries(docs)) {
     let x = x0, rels = await zip.file(relsOf(f)).async("string"), changed = false;
-    if (tplTeam) { const re = new RegExp("<a:t>\\s*" + tplTeam.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*</a:t>", "gi"); if (re.test(x)) { x = x.replace(re, (m) => "<a:t>" + xesc(/[a-z]/.test(m.slice(5, -6)) ? short.charAt(0) + short.slice(1).toLowerCase() : short) + "</a:t>"); changed = true; } }
+    if (tplTeam) { const re = new RegExp("<a:t>\\s*" + tplTeam.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*</a:t>", "gi"); if (re.test(x)) { x = x.replace(re, (m) => "<a:t>" + xesc(/[a-z]/.test(m.slice(5, -6)) ? titleCase(short) : short) + "</a:t>"); changed = true; } }
     // cover: "EUROCUP - GAME #5" and the opponent's logo
     if (/<a:t>[A-Z ]+ - GAME #\d+<\/a:t>/.test(x)) {
       x = x.replace(/<a:t>[A-Z ]+ - GAME #\d+<\/a:t>/, `<a:t>${comp} - GAME #${g && g.n ? g.n : "?"}</a:t>`); changed = true;
@@ -1068,11 +1078,20 @@ async function fillTeamSlides(zip, t, paths, relsOf) {
     const boxes = /<a:t>OFFENSIVE<\/a:t>/i.test(x) && /<a:t>DEFENSIVE<\/a:t>/i.test(x) ? [[bulletLines(cfg.offense)], [bulletLines(cfg.defense)]]
       : /<a:t>Keys to<\/a:t>/i.test(x) ? [[bulletLines(cfg.keysDefense), bulletLines(cfg.keysOffense)]] : null;
     if (boxes && boxes.flat().some(Boolean)) { x = setBulletBoxes(x, boxes); changed = true; }
+    // Keys to WIN: the title's two halves restyled
+    if (/<a:t>Keys to<\/a:t>/i.test(x)) {
+      const win = shapeByName(x, "WIN"); if (win) x = x.slice(0, win[0]) + dropShape(x.slice(win[0], win[1]), WIN_DROP) + x.slice(win[1]);
+      const keys = shapeByName(x, "Keys to"), layout = zip.file("ppt/slideLayouts/" + (rels.match(/slideLayout\d+\.xml/) || [""])[0]);
+      const bg = layout && ((await layout.async("string")).match(/<p:bg>[\s\S]*?<a:srgbClr val="(\w{6})"/) || [])[1];
+      if (keys && bg) x = x.slice(0, keys[0]) + x.slice(keys[0], keys[1]).replace(/(<a:outerShdw\b[^>]*>)[\s\S]*?(<\/a:outerShdw>)/, `$1<a:srgbClr val="${bg}"/>$2`) + x.slice(keys[1]);
+      changed = true;
+    }
     // referees: the designated crew of the game (crew chief = {{ref1_…}}), each photo a head shot of
     // referees/<key>.jpg, the surname in script over the first name; a referee without a photo has the name raised into
     // the photo's place. Before the designation the slide reads TBA, without numbers.
     if (x.includes("{{ref1_last}}")) {
       const crew = (g && g.refs) || [];
+      x = x.replace(/<p:(sp|pic)>[\s\S]*?<\/p:\1>/g, (shape) => /name="(Referee \d (name|photo)|\(\d\))"/.test(shape) ? dropShape(shape, REF_DROP) : shape);
       const raise = (sp, y) => { const b = shapeByName(x, sp); if (b) x = x.slice(0, b[0]) + x.slice(b[0], b[1]).replace(/(<a:off x="-?\d+" y=")-?\d+"/, `$1${y}"`) + x.slice(b[1]); };
       for (const n of [1, 2, 3]) {
         const r = crew[n - 1];
@@ -1204,6 +1223,11 @@ function textBlock(txBody, inherited) {
       Object.assign(node.style, { fontSize: (attr("sz") || 1800) / 100 + "px", color: pick(from, hexOf) || "#000", fontWeight: attr("b") === "1" ? "700" : "400", fontStyle: attr("i") === "1" ? "italic" : "normal", fontVariantCaps: attr("cap") === "small" ? "small-caps" : "normal", fontFamily: face ? fontStack(face) : "Calibri, sans-serif" });
       const shift = Number(rPr && rPr.getAttribute("baseline")) || 0;   // super- or subscript: two thirds the size, moved
       if (shift) Object.assign(node.style, { fontSize: (attr("sz") || 1800) / 150 + "px", verticalAlign: shift / 66667 + "em" });
+      const shadow = pick(from, s => kid(kid(s, "effectLst"), "outerShdw"));   // dir: 60000ths of a degree, clockwise from the right
+      if (shadow) {
+        const rgb = kid(shadow, "srgbClr"), alpha = kid(rgb, "alpha"), dist = (shadow.getAttribute("dist") || 0) / EMU, dir = (shadow.getAttribute("dir") || 0) / 60000 * Math.PI / 180;
+        if (rgb) node.style.textShadow = `${dist * Math.cos(dir)}px ${dist * Math.sin(dir)}px ${(shadow.getAttribute("blurRad") || 0) / EMU}px #${rgb.getAttribute("val")}${alpha ? Math.round(alpha.getAttribute("val") * 255 / 100000).toString(16).padStart(2, "0") : ""}`;
+      }
       return node;
     };
     const align = pick(levels, l => l.getAttribute("algn"));
